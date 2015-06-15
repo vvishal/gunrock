@@ -670,7 +670,11 @@ int main( int argc, char** argv)
 
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	   
+	
+	
+	printf("mpi thread rank %i\n",rank);
+	
+	 /*  
 	std::string device_x = "device_"+SSTR(rank);
 	printf("checking for %s\n",device_x.c_str());
 	
@@ -687,7 +691,7 @@ int main( int argc, char** argv)
         gpu_idx    = new int[num_gpus];
         gpu_idx[0] = rank;
     }	
-
+*/
 #else
     if (args.CheckCmdLineFlag  ("device"))
     {   
