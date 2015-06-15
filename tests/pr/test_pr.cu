@@ -11,6 +11,11 @@
  *
  * @brief Simple test driver program for computing Pagerank.
  */
+
+#include <sstream>
+
+#define SSTR( x ) dynamic_cast< std::ostringstream & >(( std::ostringstream() << std::dec << x ) ).str()
+
 #include <stdio.h>
 #include <string>
 #include <deque>
@@ -666,7 +671,7 @@ int main( int argc, char** argv)
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	   
-	std::string device_x = "device_"+std::to_string(rank);
+	std::string device_x = "device_"+SSTR(rank);
 
     if (args.CheckCmdLineFlag  (device_x))
     {   
