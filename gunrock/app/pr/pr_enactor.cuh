@@ -1375,13 +1375,13 @@ public:
 								PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>, 
 								PRFunctor<VertexId, SizeT, Value, Problem>, 
 								PRIteration<
-									AdvanceKernelPolicy, 
+									AdvanceKernelPolity, 
 									FilterKernelPolicy, 
 									PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>
 									>
 								>
 						),
-                    (void*)&(thread_slices[gpu]));
+                    (void*)&(thread_slices[0]));
         return retval;
     }
 
