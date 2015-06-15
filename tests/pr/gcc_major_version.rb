@@ -1,0 +1,1 @@
+puts v=%x(gcc --version).split("\n").shift.split[-1].split(".")[0..-2].join(".")
