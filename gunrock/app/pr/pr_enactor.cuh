@@ -1081,7 +1081,7 @@ public:
         int           num_gpus           =   problem     -> num_gpus;
         int           thread_num         =   thread_data -> thread_num;
         int           gpu_idx            =   problem     -> gpu_idx            [thread_num] ;
-        int           server_idx         =   problem     -> server_idx         [thread_num] ;
+        //int           server_idx         =   problem     -> server_idx         [thread_num] ;
         DataSlice    *data_slice         =   problem     -> data_slices        [thread_num].GetPointer(util::HOST);
         GraphSlice   *graph_slice        =   problem     -> graph_slices       [thread_num] ;
         FrontierAttribute<SizeT>
