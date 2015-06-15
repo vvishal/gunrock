@@ -454,7 +454,6 @@ cudaError_t Check_Size(
 }
 
 
-
 template <
     bool     SIZE_CHECK,
     typename SizeT, 
