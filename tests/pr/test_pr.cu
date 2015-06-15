@@ -44,6 +44,9 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/page_rank.hpp>
 
+//mpi
+#include <mpi.h>
+
 using namespace gunrock;
 using namespace gunrock::util;
 using namespace gunrock::oprtr;
