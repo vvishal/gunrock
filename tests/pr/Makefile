@@ -40,11 +40,14 @@ SM_TARGETS = $(GEN_SM35) $(GEN_SM37)
 CUDA_INC = "$(shell dirname $(NVCC))/../include"
 MGPU_INC = "../../externals/moderngpu/include"
 CUB_INC = "../../externals/cub"
-BOOST_DIR = "../../../boost_1_53_0"
-BOOST_DEPS = -Xlinker $(BOOST_DIR)/bin.v2/libs/timer/build/gcc-4.6/release/link-static/threading-multi/cpu_timer.o -Xlinker $(BOOST_DIR)/bin.v2/libs/chrono/build/gcc-4.6/release/link-static/threading-multi/chrono.o -Xlinker $(BOOST_DIR)/bin.v2/libs/system/build/gcc-4.6/release/link-static/threading-multi/libboost_system.a -Xlinker -lrt
+BOOST_DIR = "/media/home/jay/gr/boost_1_58_0/"
+GCC_VERSION_LONG=$(shell ruby gcc_major_version.rb)
+GCC_VERSION=$(shell echo $(GCC_VERSION_LONG))
+BOOST_LIB_DIR=$(BOOST_DIR)/bin.v2/libs/timer/build/gcc-$(GCC_VERSION)/release/link-static/threading-multi
+BOOST_DEPS = -Xlinker $(BOOST_LIB_DIR)/cpu_timer.o -Xlinker $(BOOST_LIB_DIR)/chrono.o -Xlinker $(BOOST_LIB_DIR)/libboost_system.a -Xlinker -lrt
 OMP_DEPS = -Xcompiler -fopenmp -Xlinker -lgomp
-METIS_DEPS = -Xlinker "/usr/local/lib/libmetis.a"
-INC = -I$(CUDA_INC) -I$(BOOST_DIR) -I$(MGPU_INC) $(BOOST_DEPS) -I$(CUB_INC) $(OMP_DEPS) $(METIS_DEPS) -I.. -I../..
+METIS_DEPS = -Xlinker "$(HOME)/lib/libmetis.a"
+INC = -I$(CUDA_INC) -I$(BOOST_DIR) -I$(MGPU_INC) $(BOOST_DEPS) -I$(CUB_INC) $(OMP_DEPS) $(METIS_DEPS) -I.. -I../.. -I$(HOME)/include
 
 #-------------------------------------------------------------------------------
 # Defines
