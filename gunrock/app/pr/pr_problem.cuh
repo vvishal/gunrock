@@ -54,13 +54,13 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
         util::Array1D<SizeT, Value   > rank_curr;           /**< Used for ping-pong page rank value */
         util::Array1D<SizeT, Value   > rank_next;           /**< Used for ping-pong page rank value */       
         util::Array1D<SizeT, SizeT   > degrees;             /**< Used for keeping out-degree for each vertex */
-        util::Array1D<SizeT, SizeT   > degrees_pong;
-        util::Array1D<SizeT, SizeT   > labels;
-        util::Array1D<SizeT, VertexId> node_ids;
+        util::Array1D<SizeT, SizeT   > degrees_pong;        /**   auxiliary array, contains degree number for each node  */
+        util::Array1D<SizeT, SizeT   > labels;              /** legacy, can be kept empty */
+        util::Array1D<SizeT, VertexId> node_ids;            /** node indices array which is used as the key for the latter node_id node_id, pagerank_value key-value pair sort after the computation is done. */
         util::Array1D<SizeT, SizeT   > markers;
         util::Array1D<SizeT, VertexId> *temp_keys_out;
         Value    threshold;               /**< Used for recording accumulated error */
-        Value    delta;
+        Value    delta;                   /** delta is the damping factor and is set to 0.85 */
         VertexId src_node;
         bool     to_continue;
         SizeT    local_nodes;

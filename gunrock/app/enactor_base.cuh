@@ -493,13 +493,17 @@ void PushNeibor(
                 if (data_slice_p->value__associate_in[t][gpu_][i].GetSize() < queue_length) {to_reallocate=true;break;}
     }
 
+
+	//if to_reallocate then change GPU index and do cudaMemcpyAsync to copy the data to the new GPU
     if (to_reallocate)
     {
         if (SIZE_CHECK) util::SetDevice(data_slice_p->gpu_idx);
+		// check size for keys
         if (enactor_stats->retval = Check_Size<SIZE_CHECK, SizeT, VertexId>(
             "keys_in", queue_length, &data_slice_p->keys_in[t][gpu_], over_sized,
             gpu, enactor_stats->iteration, peer)) return;
         
+		//check size for vertex associates
         for (i=0;i<num_vertex_associate;i++)
         {
             if (enactor_stats->retval = Check_Size<SIZE_CHECK, SizeT, VertexId>(
@@ -507,6 +511,8 @@ void PushNeibor(
                 gpu, enactor_stats->iteration, peer)) return;
             data_slice_p->vertex_associate_ins[t][gpu_][i] = data_slice_p->vertex_associate_in[t][gpu_][i].GetPointer(util::DEVICE);
         }
+
+		//check size forvalue associates
         for (i=0;i<num_value__associate;i++)
         {
             if (enactor_stats->retval = Check_Size<SIZE_CHECK, SizeT, Value>(
@@ -514,6 +520,7 @@ void PushNeibor(
                 gpu, enactor_stats->iteration, peer)) return;
             data_slice_p->value__associate_ins[t][gpu_][i] = data_slice_p->value__associate_in[t][gpu_][i].GetPointer(util::DEVICE);
         }
+		
         if (SIZE_CHECK)
         {
             if (enactor_stats->retval = data_slice_p->vertex_associate_ins[t][gpu_].Move(util::HOST, util::DEVICE)) return;
@@ -522,6 +529,8 @@ void PushNeibor(
         }
     }
 
+
+	
     if (enactor_stats-> retval = util::GRError(cudaMemcpyAsync(
         data_slice_p -> keys_in[t][gpu_].GetPointer(util::DEVICE),
         data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),
@@ -546,6 +555,7 @@ void PushNeibor(
                 "cudaMemcpyPeer value__associate_out failed", __FILE__, __LINE__)) return;
     }
 }
+
 
 template <typename Problem>
 void ShowDebugInfo(
@@ -628,6 +638,25 @@ cudaError_t Check_Record(
     }
     return retval;
 }
+
+
+
+template <
+    int      NUM_VERTEX_ASSOCIATES,
+    int      NUM_VALUE__ASSOCIATES,
+    typename Enactor,
+    typename Functor,
+    typename Iteration>
+void MPI_Comm_Loop(
+    ThreadSlice *thread_data)
+{
+	
+	
+}
+
+
+//test
+
 
 template <
     int      NUM_VERTEX_ASSOCIATES,

@@ -321,6 +321,7 @@ struct DataSliceBase
 {
     int    num_gpus            ; // Number of GPUs
     int    gpu_idx             ; // GPU index
+	int    server_idx          ; // Server index, in case of a distributed system
     int    wait_counter        ; // Wait counter for interation loop control
     int    gpu_mallocing       ; // Whether gpu is in malloc
     int    num_vertex_associate; // Number of associate values in VertexId type for each vertex

@@ -1081,6 +1081,7 @@ public:
         int           num_gpus           =   problem     -> num_gpus;
         int           thread_num         =   thread_data -> thread_num;
         int           gpu_idx            =   problem     -> gpu_idx            [thread_num] ;
+        int           server_idx         =   problem     -> server_idx         [thread_num] ;
         DataSlice    *data_slice         =   problem     -> data_slices        [thread_num].GetPointer(util::HOST);
         GraphSlice   *graph_slice        =   problem     -> graph_slices       [thread_num] ;
         FrontierAttribute<SizeT>
@@ -1088,10 +1089,10 @@ public:
         EnactorStats *enactor_stats      = &(enactor     -> enactor_stats      [thread_num * num_gpus]);
 
         do {
-            printf("CCThread entered\n");fflush(stdout);
+            printf("PRThread entered\n");fflush(stdout);
             if (enactor_stats[0].retval = util::SetDevice(gpu_idx)) break;
             thread_data->stats = 1;
-            while (thread_data->stats !=2) sleep(0);
+            while (thread_data->stats !=2) sleep(0); //busy wait until EnactPR is waiting (line ~1385)
             thread_data->stats = 3;
 
             for (int peer_=0; peer_<num_gpus; peer_++)
@@ -1105,7 +1106,7 @@ public:
             //gunrock::app::Iteration_Loop
             //    <0, 0, PrEnactor, PrFunctor, R0DIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
             
-            data_slice->PR_queue_selector = frontier_attribute[0].selector;
+            data_slice->PR_queue_selector = frontier_attribute[0].selector; //TODO: mape MPI compatible
             //for (int peer_=0; peer_<num_gpus; peer_++)
             //{
             //    frontier_attribute[peer_].queue_reset = true;
@@ -1129,11 +1130,15 @@ public:
             gunrock::app::Iteration_Loop
                 <0, 1, PrEnactor, PrFunctor, PRIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
             
+			
+			//do final clean up; sent out last values while thread 0 sorts the nodes
             if (thread_num > 0)
             {
                 bool over_sized = false;
+				//check if data_slice->local_nodes > &data_slice->value__associate_out[1][0].size
                 if (enactor_stats->retval = Check_Size<PrEnactor::SIZE_CHECK, SizeT, Value>(
                     "values_out", data_slice->local_nodes, &data_slice->value__associate_out[1][0], over_sized, thread_num, enactor_stats->iteration, -1)) break;
+				//check if data_slice->local_nodes > &data_slice->keys_out[1]
                 if (enactor_stats->retval = Check_Size<PrEnactor::SIZE_CHECK, SizeT, VertexId>(
                     "keys_out", data_slice->local_nodes, &data_slice->keys_out[1], over_sized, thread_num, enactor_stats->iteration, -1)) break;
                 Assign_Values_PR <VertexId, SizeT, Value>
@@ -1161,7 +1166,7 @@ public:
                 data_slice->final_event_set = true;
                 //util::cpu_mt::PrintGPUArray("keys_out", data_slice->keys_out[1].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]); 
                 //util::cpu_mt::PrintGPUArray("values_out", data_slice->value__associate_out[1][0].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]); 
-            } else {
+            } else { //thread_num == 0
                 int counter = 0;
                 int *markers = new int [num_gpus];
                 for (int peer=0; peer<num_gpus; peer++) markers[peer] = 0;
