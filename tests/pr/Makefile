@@ -43,8 +43,10 @@ CUB_INC = "../../externals/cub"
 BOOST_DIR = "/media/home/jay/gr/boost_1_58_0/"
 GCC_VERSION_LONG=$(shell ruby gcc_major_version.rb)
 GCC_VERSION=$(shell echo $(GCC_VERSION_LONG))
-BOOST_LIB_DIR=$(BOOST_DIR)/bin.v2/libs/timer/build/gcc-$(GCC_VERSION)/release/link-static/threading-multi
-BOOST_DEPS = -Xlinker $(BOOST_LIB_DIR)/cpu_timer.o -Xlinker $(BOOST_LIB_DIR)/chrono.o -Xlinker $(BOOST_LIB_DIR)/libboost_system.a -Xlinker -lrt
+BOOST_LIB_DIR=$(BOOST_DIR)/bin.v2/libs/
+BOOST_SUBLIB_DIR=/build/gcc-$(GCC_VERSION)/release/link-static/threading-multi
+
+BOOST_DEPS = -Xlinker $(BOOST_LIB_DIR)/timer/$(BOOST_SUBLIB_DIR)/cpu_timer.o -Xlinker $(BOOST_LIB_DIR)/chrono/$(BOOST_SUBLIB_DIR)/chrono.o -Xlinker $(BOOST_LIB_DIR)/system/$(BOOST_SUBLIB_DIR)/libboost_system.a -Xlinker -lrt
 OMP_DEPS = -Xcompiler -fopenmp -Xlinker -lgomp
 METIS_DEPS = -Xlinker "$(HOME)/lib/libmetis.a"
 INC = -I$(CUDA_INC) -I$(BOOST_DIR) -I$(MGPU_INC) $(BOOST_DEPS) -I$(CUB_INC) $(OMP_DEPS) $(METIS_DEPS) -I.. -I../.. -I$(HOME)/include
