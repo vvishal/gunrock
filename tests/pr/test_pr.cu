@@ -659,6 +659,8 @@ int main( int argc, char** argv)
         return 1;
     }   
 
+	MPI_Init(&argc,&argv);
+
     if (args.CheckCmdLineFlag  ("device"))
     {   
         std::vector<int> gpus;
