@@ -11,7 +11,6 @@
  *
  * @brief Simple test driver program for computing Pagerank.
  */
-
 #include <stdio.h>
 #include <string>
 #include <deque>
@@ -44,8 +43,9 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/page_rank.hpp>
 
-//mpi
+#ifdef WITHMPI
 #include <mpi.h>
+#endif
 
 using namespace gunrock;
 using namespace gunrock::util;
@@ -659,8 +659,30 @@ int main( int argc, char** argv)
         return 1;
     }   
 
-	MPI_Init(&argc,&argv);
+#ifdef WITHMPI
+	int rank;
+	char hostname[256];
 
+	MPI_Init(&argc,&argv);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	   
+	std::string device_x = "device_"+std::to_string(rank);
+
+    if (args.CheckCmdLineFlag  (device_x))
+    {   
+        std::vector<int> gpus;
+        args.GetCmdLineArguments<int>(device_x,gpus);
+        num_gpus   = gpus.size();
+        gpu_idx    = new int[num_gpus];
+        for (int i=0;i<num_gpus;i++)
+            gpu_idx[i] = gpus[i];
+    } else {
+        num_gpus   = 1;
+        gpu_idx    = new int[num_gpus];
+        gpu_idx[0] = rank;
+    }	
+
+#else
     if (args.CheckCmdLineFlag  ("device"))
     {   
         std::vector<int> gpus;
@@ -673,7 +695,8 @@ int main( int argc, char** argv)
         num_gpus   = 1;
         gpu_idx    = new int[num_gpus];
         gpu_idx[0] = 0;
-    }   
+    }	
+#endif	   
     streams  = new cudaStream_t[num_gpus * num_gpus * 2]; 
     context  = new ContextPtr  [num_gpus * num_gpus];
     printf("Using %d gpus: ", num_gpus);
