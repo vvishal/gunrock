@@ -493,6 +493,7 @@ void PushNeibor(
                 if (data_slice_p->value__associate_in[t][gpu_][i].GetSize() < queue_length) {to_reallocate=true;break;}
     }
 
+	printf("pushing %i data from %i to %i\n", queue_length, gpu, peer);
 
 	//if to_reallocate then change GPU index and do cudaMemcpyAsync to copy the data to the new GPU
     if (to_reallocate)
