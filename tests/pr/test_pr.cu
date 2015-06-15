@@ -672,12 +672,13 @@ int main( int argc, char** argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	   
 	std::string device_x = "device_"+SSTR(rank);
-
-    if (args.CheckCmdLineFlag  (device_x))
+	printf("checking for %s\n",device_x.c_str*());
+	
+    if (args.CheckCmdLineFlag  (device_x) && args.CheckCmdLineFlag  ("num_gpus"))
     {   
         std::vector<int> gpus;
         args.GetCmdLineArguments<int>(device_x,gpus);
-        num_gpus   = gpus.size();
+		args.GetCmdLineArgument("num_gpus", num_gpus);
         gpu_idx    = new int[num_gpus];
         for (int i=0;i<num_gpus;i++)
             gpu_idx[i] = gpus[i];
