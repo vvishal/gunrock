@@ -654,6 +654,8 @@ void MPI_Comm_Loop(
     ThreadSlice *thread_data)
 {
 	
+	printf("MPI loop ready for action\n");
+	
 	
 }
 

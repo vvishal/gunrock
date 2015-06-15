@@ -1367,6 +1367,21 @@ public:
                     (void*)&(thread_slices[gpu]));
             thread_Ids[gpu] = thread_slices[gpu].thread_Id;
         }
+  
+		CUTThread MPI_thread_id = cutStartThread(
+                (CUT_THREADROUTINE)&(
+					MPI_Comm_Loop<0, 
+								1, 
+								PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>, 
+								PRFunctor<VertexId, SizeT, Value, Problem>, 
+								PRIteration<
+									AdvanceKernelPolicy, 
+									FilterKernelPolicy, 
+									PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>
+									>
+								>
+						),
+                    (void*)&(thread_slices[gpu]));
         return retval;
     }
 
