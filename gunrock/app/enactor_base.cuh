@@ -453,6 +453,22 @@ cudaError_t Check_Size(
     return retval;
 }
 
+
+template <
+    int      NUM_VERTEX_ASSOCIATES,
+    int      NUM_VALUE__ASSOCIATES,
+    typename Enactor,
+    typename Functor,
+    typename Iteration>
+void MPI_Comm_Loop(
+    ThreadSlice *thread_data)
+{
+	
+	
+}
+
+
+
 template <
     bool     SIZE_CHECK,
     typename SizeT, 
