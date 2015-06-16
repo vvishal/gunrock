@@ -32,8 +32,9 @@ SM_TARGETS = $(GEN_SM35) $(GEN_SM37)
 # Libs
 #-------------------------------------------------------------------------------
 
-LIBS=-lmpi
-LIBS_DIR=-L$(HOME)/libs
+MPI_LIBS=-lmpi
+MPI_LIBS_DIR=-L/usr/lib/
+MPI_INCLUDE_DIR=-I/usr/include/mpi
 
 #-------------------------------------------------------------------------------
 # Includes
@@ -118,7 +119,7 @@ mpi_test: bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX)
 
 bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) : test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(DEPS)
 	mkdir -p bin
-	$(NVCC) $(DEFINES) $(SM_TARGETS) -o bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(NVCCFLAGS) $(ARCH) $(INC) $(LIBS) $(LIBS_DIR) -DWITHMPI -O3 -L/media/home/volkmar/lib
+	$(NVCC) $(DEFINES) $(SM_TARGETS) -o bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(NVCCFLAGS) $(ARCH) $(INC) $(MPI_LIBS) $(MPI_LIBS_DIR) $(MPI_INCLUDE_DIR) -DWITHMPI -O3
 
 #-------------------------------------------------------------------------------
 # Clean

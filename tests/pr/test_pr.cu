@@ -650,7 +650,7 @@ void RunTests(Test_Parameter* parameter)
  * Main
  ******************************************************************************/
 
-int main( int argc, char** argv)
+int main( int argc, char ** argv)
 {
     CommandLineArgs  args(argc, argv);
     int              num_gpus = 0;
@@ -666,17 +666,18 @@ int main( int argc, char** argv)
 
 #ifdef WITHMPI
 	int rank;
-	char hostname[256];
-
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	int num_ranks;
+	MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);	
+	// Get the name of the processor
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
 	
 	
-	printf("mpi thread rank %i\n",rank);
-	
-	 /*  
 	std::string device_x = "device_"+SSTR(rank);
-	printf("checking for %s\n",device_x.c_str());
+	printf("thread rank %i (%s), checking for %s\n",rank, processor_name, device_x.c_str());
 	
     if (args.CheckCmdLineFlag  (device_x.c_str()) && args.CheckCmdLineFlag  ("num_gpus"))
     {   
@@ -691,7 +692,7 @@ int main( int argc, char** argv)
         gpu_idx    = new int[num_gpus];
         gpu_idx[0] = rank;
     }	
-*/
+	
 #else
     if (args.CheckCmdLineFlag  ("device"))
     {   
