@@ -321,7 +321,6 @@ struct DataSliceBase
 {
     int    num_gpus            ; // Number of GPUs
     int    gpu_idx             ; // GPU index
-	int    server_idx          ; // Server index, in case of a distributed system
     int    wait_counter        ; // Wait counter for interation loop control
     int    gpu_mallocing       ; // Whether gpu is in malloc
     int    num_vertex_associate; // Number of associate values in VertexId type for each vertex
@@ -357,6 +356,7 @@ struct DataSliceBase
     util::Array1D<SizeT, char        >  *expand_incoming_array   ; // compressed data structure for expand_incoming kernel
     util::Array1D<SizeT, VertexId    >   preds                   ; // predecessors of vertices
     util::Array1D<SizeT, VertexId    >   temp_preds              ; // tempory storages for predecessors
+	util::Array1D<int  , int         >   server_idx              ; // Server indices for each gpu, in case of a distributed system
     
     //Frontier queues. Used to track working frontier.
     util::DoubleBuffer<SizeT, VertexId, Value>  *frontier_queues ; // frontier queues

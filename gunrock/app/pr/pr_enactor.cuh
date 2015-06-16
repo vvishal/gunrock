@@ -1152,7 +1152,7 @@ public:
                     data_slice->keys_out[0].GetPointer(util::DEVICE),
                     data_slice->local_nodes);
                 enactor_stats->iteration++;
-                PushNeibor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1> (
+                PushNeighbor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1> (
                     thread_num,
                     0,
                     data_slice->local_nodes,
@@ -1367,7 +1367,7 @@ public:
                     (void*)&(thread_slices[gpu]));
             thread_Ids[gpu] = thread_slices[gpu].thread_Id;
         }
-  
+#ifdef WITHMPI
 		CUTThread MPI_thread_id = cutStartThread(
                 (CUT_THREADROUTINE)&(
 					MPI_Comm_Loop<0, 
@@ -1382,6 +1382,7 @@ public:
 								>
 						),
                     (void*)&(thread_slices[0]));
+#endif
         return retval;
     }
 

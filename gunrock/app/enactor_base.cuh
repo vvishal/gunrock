@@ -452,7 +452,40 @@ cudaError_t Check_Size(
     }
     return retval;
 }
-
+#ifdef WITHMPI
+template <
+    bool     SIZE_CHECK,
+    typename SizeT, 
+    typename VertexId,
+    typename Value,
+    typename GraphSlice,
+    typename DataSlice,
+    SizeT    num_vertex_associate,
+    SizeT    num_value__associate>
+void MPI_PushNeighbor(
+    int gpu,
+    int peer,
+	int peer_server_idx,
+    SizeT             queue_length,
+    EnactorStats      *enactor_stats,
+    DataSlice         *data_slice_l,
+    DataSlice         *data_slice_p,
+    GraphSlice        *graph_slice_l,
+    GraphSlice        *graph_slice_p,
+    cudaStream_t      stream)
+{
+    if (peer == gpu) return;
+	int header[3];
+	header[0] = gpu;
+	header[1] = 0;
+	header[2] = queue_length;
+	if(MPI_SUCCESS != MPI_Sent(&header, 3, MPI_INT, peer_server_idx, 0,MPI_COMM_WORLD))
+	{
+		printf("Unable to sent header to server %i\n", peer_server_idx);
+		return;
+	}
+}
+#endif
 
 template <
     bool     SIZE_CHECK,
@@ -463,7 +496,7 @@ template <
     typename DataSlice,
     SizeT    num_vertex_associate,
     SizeT    num_value__associate>
-void PushNeibor(
+void PushNeighbor(
     int gpu,
     int peer,
     SizeT             queue_length,
@@ -493,9 +526,6 @@ void PushNeibor(
             for (i=0;i<num_value__associate;i++)
                 if (data_slice_p->value__associate_in[t][gpu_][i].GetSize() < queue_length) {to_reallocate=true;break;}
     }
-
-
-	printf("pushing %i data from %i to %i\n", queue_length, gpu, peer);
 
 	//if to_reallocate then change GPU index and do cudaMemcpyAsync to copy the data to the new GPU
     if (to_reallocate)
@@ -599,6 +629,8 @@ void ShowDebugInfo(
     //    util::cpu_mt::PrintGPUArray<SizeT, unsigned char>("mask1", data_slice[0]->visited_mask.GetPointer(util::DEVICE), (graph_slice->nodes+7)/8, thread_num, enactor_stats->iteration);
 }  
 
+
+
 template <typename DataSlice>
 cudaError_t Set_Record(
     DataSlice *data_slice,
@@ -611,6 +643,8 @@ cudaError_t Set_Record(
     data_slice->events_set[iteration%4][peer_][stage]=true;
     return retval;
 }
+
+
 
 template <typename DataSlice>
 cudaError_t Check_Record(
@@ -643,7 +677,7 @@ cudaError_t Check_Record(
 }
 
 
-
+#ifdef WITHMPI
 template <
     int      NUM_VERTEX_ASSOCIATES,
     int      NUM_VALUE__ASSOCIATES,
@@ -653,14 +687,119 @@ template <
 void MPI_Comm_Loop(
     ThreadSlice *thread_data)
 {
-	
+    Problem      *problem              =  (Problem*) thread_data->problem;
+    Enactor      *enactor              =  (Enactor*) thread_data->enactor;
+    int           num_gpus             =   problem     -> num_gpus;
+    int           thread_num           =   thread_data -> thread_num;
+    DataSlice    *data_slice           =   problem     -> data_slices        [thread_num].GetPointer(util::HOST);
+    util::Array1D<SizeT, DataSlice>
+                 *s_data_slice         =   problem     -> data_slices;
+    GraphSlice   *graph_slice          =   problem     -> graph_slices       [thread_num] ;
+    GraphSlice   **s_graph_slice       =   problem     -> graph_slices;
+    FrontierAttribute<SizeT>
+                 *frontier_attribute   = &(enactor     -> frontier_attribute [thread_num * num_gpus]);
+    FrontierAttribute<SizeT>
+                 *s_frontier_attribute = &(enactor     -> frontier_attribute [0         ]);  
+    EnactorStats *enactor_stats        = &(enactor     -> enactor_stats      [thread_num * num_gpus]);
+    EnactorStats *s_enactor_stats      = &(enactor     -> enactor_stats      [0         ]);  
+    util::CtaWorkProgressLifetime
+                 *work_progress        = &(enactor     -> work_progress      [thread_num * num_gpus]);
+    ContextPtr   *context              =   thread_data -> context;
+    int          *stages               =   data_slice  -> stages .GetPointer(util::HOST);
+    bool         *to_show              =   data_slice  -> to_show.GetPointer(util::HOST);
 	printf("MPI loop ready for action\n");
 	
+	//ring buffer initialization
+	void ***ring_buffer; //needs to be initialized properly: gpu, ring_buffer_index
+	int ring_buffer_length = 4;
 	
+	int *ring_buffer_front_id = (int*)malloc(sizeof(int)*num_gpus);
+	int *ring_buffer_back_id  = (int*)malloc(sizeof(int)*num_gpus);
+	//memory for the buffer gets allocated the first time data is received
+	int *allocated=(int*)malloc(sizeof(int)*num_gpus);
+	
+	for(int i=0; i<num_gpus; i++)
+	{
+		allocated[i]=0;
+		ring_buffer_front_id[i] = 0;
+		ring_buffer_back_id[i]  = 0;
+	}
+	
+	
+	//header
+	//3 integers: sending gpu, iteration, length of context	
+	
+	while(!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus))
+	{
+		int header_length=3;
+		int header[3]; 
+		MPI_Status status;
+		int mpi_retval;
+		
+		if(MPI_SUCCESS != MPI_Recv(&header, header_length, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status))
+		{
+			fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
+			return;
+		}
+		int sender_rank     = status.MPI_SOURCE;
+		int sender_gpu      = header[0];
+		int sender_iter     = header[1];
+		int sender_msg_len  = header[2];
+		//header successfully received
+		if(Enactor::DEBUG)
+		{
+			printf("Incoming message from %i: [%i, %i, %i] ",sender_rank, header[0], header[1], header[2]);
+		}
+		if(!allocated[sender_gpu])
+		{
+			allocated[sender_gpu]=1;
+			//allocate buffer 
+		}
+		//check for buffer overflow
+		if((ring_buffer_front_id[i]+1)%ring_buffer_length == ring_buffer_back_id)
+		{
+			fprintf(stderr,"incoming buffer overflow\n");
+			return;
+		}
+		/*
+		MPI_Recv eqivalent for:
+	
+		if (enactor_stats-> retval = util::GRError(cudaMemcpyAsync(
+        	data_slice_p -> keys_in[t][gpu_].GetPointer(util::DEVICE),  //dst
+        	data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),   //src
+        	sizeof(VertexId) * queue_length,                            //count
+		 	cudaMemcpyDefault,                                          //Host2Device, device2Host, etc
+			stream),                                                    //stream
+        "cudaMemcpyPeer keys failed", __FILE__, __LINE__)) return;
+        
+    	for (int i=0;i<num_vertex_associate;i++)
+    	{
+        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
+            data_slice_p->vertex_associate_ins[t][gpu_][i],
+            data_slice_l->vertex_associate_outs[peer_][i],
+            sizeof(VertexId) * queue_length, cudaMemcpyDefault, stream),
+            "cudaMemcpyPeer vertex_associate_out failed", __FILE__, __LINE__)) return;
+    	}
+
+    	for (int i=0;i<num_value__associate;i++)
+    	{   
+        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
+            data_slice_p->value__associate_ins[t][gpu_][i],
+            data_slice_l->value__associate_outs[peer_][i],
+            sizeof(Value) * queue_length, cudaMemcpyDefault, stream),
+                "cudaMemcpyPeer value__associate_out failed", __FILE__, __LINE__)) return;
+    	}
+		
+		*/
+	}
+	
+	
+	free(allocated);
+	free(ring_buffer_front_id);
+	free(ring_buffer_back_id);
 }
 
-
-//test
+#endif
 
 
 template <
@@ -856,17 +995,65 @@ void Iteration_Loop(
                             stages[peer__]=2;
                         }
                     } else { //Push Neibor
-                        PushNeibor <Enactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice,
-                                NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
-                            thread_num,
-                            peer,
-                            data_slice->out_length[peer_],
-                            enactor_stats_,
-                            s_data_slice  [thread_num].GetPointer(util::HOST),
-                            s_data_slice  [peer]      .GetPointer(util::HOST),
-                            s_graph_slice [thread_num],
-                            s_graph_slice [peer],
-                            streams       [peer__]);
+#ifdef WITHMPI
+						if(data_slice->server_idx[gpu]!=data_slice->server_idx[peer])
+						{
+							//MPI_PUSH_NEIGHBOR
+                    		MPI_PushNeighbor <
+								Enactor::SIZE_CHECK, 
+								SizeT, 
+								VertexId, 
+								Value, 
+								GraphSlice, 
+								DataSlice,
+								NUM_VERTEX_ASSOCIATES, 
+								NUM_VALUE__ASSOCIATES
+									> (
+          						thread_num,
+                  				peer,
+								data_slice->server_idx[peer],
+                  				data_slice->out_length[peer_],
+                 			   	enactor_stats_,
+                				s_data_slice  [thread_num].GetPointer(util::HOST),
+               				 	s_data_slice  [peer]      .GetPointer(util::HOST),
+               				 	s_graph_slice [thread_num],
+                      		 	s_graph_slice [peer],
+                        		streams       [peer__]
+									);
+						}
+						else
+						{
+                    		PushNeighbor <
+								Enactor::SIZE_CHECK, 
+								SizeT, 
+								VertexId, 
+								Value, 
+								GraphSlice, 
+								DataSlice,
+								NUM_VERTEX_ASSOCIATES, 
+								NUM_VALUE__ASSOCIATES
+									> (
+          						thread_num,
+                  				peer,
+                  				data_slice->out_length[peer_],
+                 			   	enactor_stats_,
+                				s_data_slice  [thread_num].GetPointer(util::HOST),
+               				 	s_data_slice  [peer]      .GetPointer(util::HOST),
+               				 	s_graph_slice [thread_num],
+                      		 	s_graph_slice [peer],
+                        		streams       [peer__]
+									);
+						}
+#else
+                   		PushNeighbor <Enactor::SIZE_CHECK,SizeT, 
+							VertexId, Value, GraphSlice, DataSlice,
+							NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
+          					thread_num, peer, data_slice->out_length[peer_],
+              			   	enactor_stats_, s_data_slice  [thread_num].GetPointer(util::HOST),
+            			 	s_data_slice  [peer]      .GetPointer(util::HOST),
+            			 	s_graph_slice [thread_num], s_graph_slice [peer],
+                       		streams       [peer__]);		
+#endif
                         Set_Record(data_slice, iteration, peer_, stages[peer__], streams[peer__]);
                         stages[peer__]=3;
                     }
