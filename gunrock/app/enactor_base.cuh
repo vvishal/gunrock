@@ -687,6 +687,11 @@ template <
 void MPI_Comm_Loop(
     ThreadSlice *thread_data)
 {
+	typedef typename Enactor::Problem     Problem   ;
+    typedef typename Problem::SizeT       SizeT     ;
+    typedef typename Problem::VertexId    VertexId  ;
+    typedef typename Problem::Value       Value     ;
+    typedef typename Problem::DataSlice   DataSlice ;
     Problem      *problem              =  (Problem*) thread_data->problem;
     Enactor      *enactor              =  (Enactor*) thread_data->enactor;
     int           num_gpus             =   problem     -> num_gpus;
@@ -996,6 +1001,7 @@ void Iteration_Loop(
                         }
                     } else { //Push Neibor
 #ifdef WITHMPI
+						int gpu; //get global_gpu_index
 						if(data_slice->server_idx[gpu]!=data_slice->server_idx[peer])
 						{
 							//MPI_PUSH_NEIGHBOR
