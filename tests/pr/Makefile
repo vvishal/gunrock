@@ -118,7 +118,7 @@ mpi_test: bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX)
 
 bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) : test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(DEPS)
 	mkdir -p bin
-	$(NVCC) $(DEFINES) $(SM_TARGETS) -o bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(NVCCFLAGS) $(ARCH) $(INC) $(LIBS) $(LIBS_DIR) -DWITHMPI -O3
+	$(NVCC) $(DEFINES) $(SM_TARGETS) -o bin/mpi_test_pr_$(NVCC_VERSION)_$(ARCH_SUFFIX) test_pr.cu ../../gunrock/util/test_utils.cu ../../gunrock/util/error_utils.cu ../../externals/moderngpu/src/mgpucontext.cu ../../externals/moderngpu/src/mgpuutil.cpp $(NVCCFLAGS) $(ARCH) $(INC) $(LIBS) $(LIBS_DIR) -DWITHMPI -O3 -L/media/home/volkmar/lib
 
 #-------------------------------------------------------------------------------
 # Clean
