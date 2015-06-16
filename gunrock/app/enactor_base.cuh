@@ -29,6 +29,10 @@
 
 #include <moderngpu.cuh>
 
+#ifdef WITHMPI
+#include <mpi.h>
+#endif
+
 using namespace mgpu;
 
 namespace gunrock {
