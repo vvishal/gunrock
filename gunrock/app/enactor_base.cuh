@@ -483,7 +483,7 @@ void MPI_PushNeighbor(
 	header[0] = gpu;
 	header[1] = 0;
 	header[2] = queue_length;
-	if(MPI_SUCCESS != MPI_Sent(&header, 3, MPI_INT, peer_server_idx, 0,MPI_COMM_WORLD))
+	if(MPI_SUCCESS != MPI_Send(&header, 3, MPI_INT, peer_server_idx, 0,MPI_COMM_WORLD))
 	{
 		printf("Unable to sent header to server %i\n", peer_server_idx);
 		return;
@@ -703,8 +703,6 @@ void MPI_Comm_Loop(
     DataSlice    *data_slice           =   problem     -> data_slices        [thread_num].GetPointer(util::HOST);
     util::Array1D<SizeT, DataSlice>
                  *s_data_slice         =   problem     -> data_slices;
-    GraphSlice   *graph_slice          =   problem     -> graph_slices       [thread_num] ;
-    GraphSlice   **s_graph_slice       =   problem     -> graph_slices;
     FrontierAttribute<SizeT>
                  *frontier_attribute   = &(enactor     -> frontier_attribute [thread_num * num_gpus]);
     FrontierAttribute<SizeT>
@@ -765,7 +763,7 @@ void MPI_Comm_Loop(
 			//allocate buffer 
 		}
 		//check for buffer overflow
-		if((ring_buffer_front_id[i]+1)%ring_buffer_length == ring_buffer_back_id)
+		if((ring_buffer_front_id[sender_gpu]+1)%ring_buffer_length == ring_buffer_back_id)
 		{
 			fprintf(stderr,"incoming buffer overflow\n");
 			return;
