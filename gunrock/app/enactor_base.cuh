@@ -763,7 +763,7 @@ void MPI_Comm_Loop(
 			//allocate buffer 
 		}
 		//check for buffer overflow
-		if((ring_buffer_front_id[sender_gpu]+1)%ring_buffer_length == ring_buffer_back_id)
+		if((ring_buffer_front_id[sender_gpu]+1)%ring_buffer_length == ring_buffer_back_id[sender_gpu])
 		{
 			fprintf(stderr,"incoming buffer overflow\n");
 			return;
