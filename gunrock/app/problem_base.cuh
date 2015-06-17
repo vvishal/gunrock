@@ -306,6 +306,20 @@ struct GraphSlice
 
 }; // end GraphSlice
 
+
+
+#ifdef WITHMPI
+struct GPU_Topology
+{
+	int num_servers                    ;   // the number of involved servers
+	int *num_gpus_per_server           ;   // how many GPUs are used in each server
+	int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
+	int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+	int total_num_gpus                 ;   // the total number of GPUs
+};
+#endif
+
+
 /**
  * @brief Baase data slice structure which contains common data structural needed for permitives.
  *
@@ -356,7 +370,14 @@ struct DataSliceBase
     util::Array1D<SizeT, char        >  *expand_incoming_array   ; // compressed data structure for expand_incoming kernel
     util::Array1D<SizeT, VertexId    >   preds                   ; // predecessors of vertices
     util::Array1D<SizeT, VertexId    >   temp_preds              ; // tempory storages for predecessors
-	util::Array1D<int  , int         >   server_idx              ; // Server indices for each gpu, in case of a distributed system
+	
+#ifdef WITHMPI
+	struct GPU_Topology  server_indices                          ; // Server indices for each gpu, in case of a distributed system
+	int rank                                                     ; // the current rank of the MPI program
+	int num_ranks                                                ; // the number of MPI ranks 
+	int global_gpu_idx                                           ; // the global gpu index (pgu_idx is for local operations only)
+	int server_idx                                               ; // the server number (should be the same as rank)
+#endif
     
     //Frontier queues. Used to track working frontier.
     util::DoubleBuffer<SizeT, VertexId, Value>  *frontier_queues ; // frontier queues

@@ -664,34 +664,72 @@ int main( int argc, char ** argv)
         return 1;
     }   
 
+
+
+
+
 #ifdef WITHMPI
-	int rank;
+	int rank, num_ranks;
 	MPI_Init(&argc,&argv);
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	int num_ranks;
-	MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);	
-	// Get the name of the processor
+	printf("MPI_Init\n");fflush(stdout);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+
+// Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
-	
-	
-	std::string device_x = "device_"+SSTR(rank);
-	printf("thread rank %i (%s), checking for %s\n",rank, processor_name, device_x.c_str());
-	
-    if (args.CheckCmdLineFlag  (device_x.c_str()) && args.CheckCmdLineFlag  ("num_gpus"))
+	printf("MPI processor name of rank %i (of %i): %s\n",rank, num_ranks,processor_name);fflush(stdout);
+	struct gunrock::app::GPU_Topology mpi_topology;
+    if (args.CheckCmdLineFlag("mpi-topology-config"))
     {   
-        std::vector<int> gpus;
-        args.GetCmdLineArguments<int>(device_x.c_str() , gpus);
-		args.GetCmdLineArgument("num_gpus", num_gpus);
-        gpu_idx    = new int[num_gpus];
-        for (int i=0;i<num_gpus;i++)
-            gpu_idx[i] = gpus[i];
-    } else {
-        num_gpus   = 1;
-        gpu_idx    = new int[num_gpus];
-        gpu_idx[0] = rank;
-    }	
+		std::string config_filename;
+		args.GetCmdLineArgument<string>("mpi-topology-config", config_filename);
+		mpi_topology = gunrock::app::read_mpi_topology_config_file(config_filename.c_str());
+		
+		num_gpus = mpi_topology.num_gpus_per_server[rank];
+		gpu_idx  = new int[num_gpus];
+        for (int i=0; i<num_gpus; i++)
+		{
+            gpu_idx[i] = mpi_topology.local_gpu_mapping[rank][i];
+		}
+	}
+	else
+	{
+		fprintf(stderr, "No MPI GPU topology config file given\n");
+		MPI_Finalize();
+		return 0;
+	}
+    streams  = new cudaStream_t[num_gpus * num_gpus * 2]; 
+    context  = new ContextPtr  [num_gpus * num_gpus];
+	
+	std::stringstream gpu_output_stream;
+	gpu_output_stream << "MPI rank " << rank << " using "<< num_gpus << " gpus: ";
+	
+    for (int gpu=0;gpu<num_gpus;gpu++)
+    {  
+		gpu_output_stream << " " << gpu_idx[gpu]<< " ";
+        util::SetDevice(gpu_idx[gpu]);
+        for (int i=0;i<num_gpus*2;i++)
+        {   
+            int _i = gpu*num_gpus*2+i;
+            util::GRError(cudaStreamCreate(&streams[_i]), "cudaStreamCreate failed.", __FILE__, __LINE__);
+            if (i<num_gpus) context[gpu*num_gpus+i] = mgpu::CreateCudaDeviceAttachStream(gpu_idx[gpu], streams[_i]);
+        }   
+    }   
+    gpu_output_stream << std::endl;
+	std::cout << gpu_output_stream.str() << std::flush;
+
+	//
+	// Construct graph and perform search(es)
+	//
+    Test_Parameter *parameter = new Test_Parameter;
+    parameter -> Init(args);
+    parameter -> num_gpus    = mpi_topology.total_num_gpus;
+    parameter -> context     = context;
+    parameter -> gpu_idx     = gpu_idx;
+    parameter -> streams     = streams;	
+	
 	
 #else
     if (args.CheckCmdLineFlag  ("device"))
@@ -707,7 +745,7 @@ int main( int argc, char ** argv)
         gpu_idx    = new int[num_gpus];
         gpu_idx[0] = 0;
     }	
-#endif	   
+   
     streams  = new cudaStream_t[num_gpus * num_gpus * 2]; 
     context  = new ContextPtr  [num_gpus * num_gpus];
     printf("Using %d gpus: ", num_gpus);
@@ -723,7 +761,19 @@ int main( int argc, char ** argv)
         }   
     }   
     printf("\n"); fflush(stdout);
-
+	//
+	// Construct graph and perform search(es)
+	//
+    Test_Parameter *parameter = new Test_Parameter;
+    parameter -> Init(args);
+    parameter -> num_gpus    = num_gpus;
+    parameter -> context     = context;
+    parameter -> gpu_idx     = gpu_idx;
+    parameter -> streams     = streams;
+#endif	
+	
+	
+	
     // Parse graph-contruction params
     std::string graph_type = argv[1];
     int flags = args.ParsedArgc();
@@ -734,15 +784,6 @@ int main( int argc, char ** argv)
         return 1;
     }   
 
-	//
-	// Construct graph and perform search(es)
-	//
-    Test_Parameter *parameter = new Test_Parameter;
-    parameter -> Init(args);
-    parameter -> num_gpus    = num_gpus;
-    parameter -> context     = context;
-    parameter -> gpu_idx     = gpu_idx;
-    parameter -> streams     = streams;
 
     typedef int VertexId;							// Use as the node identifier type
     typedef float Value;								// Use as the value type
@@ -858,5 +899,8 @@ int main( int argc, char ** argv)
     // Run tests
     RunTests<VertexId, Value, SizeT>(parameter);
 
+#ifdef WITHMPI
+	MPI_Finalize();
+#endif
 	return 0;
 }

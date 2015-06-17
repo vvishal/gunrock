@@ -31,6 +31,10 @@
 
 #ifdef WITHMPI
 #include <mpi.h>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <fstream>
 #endif
 
 using namespace mgpu;
@@ -1004,7 +1008,8 @@ void Iteration_Loop(
                     } else { //Push Neibor
 #ifdef WITHMPI
 						int gpu; //get global_gpu_index
-						if(data_slice->server_idx[gpu]!=data_slice->server_idx[peer])
+						int target_server;
+						if(false)
 						{
 							//MPI_PUSH_NEIGHBOR
                     		MPI_PushNeighbor <
@@ -1019,7 +1024,7 @@ void Iteration_Loop(
 									> (
           						thread_num,
                   				peer,
-								data_slice->server_idx[peer],
+								target_server,
                   				data_slice->out_length[peer_],
                  			   	enactor_stats_,
                 				s_data_slice  [thread_num].GetPointer(util::HOST),
@@ -1383,6 +1388,110 @@ void Iteration_Loop(
     }
 }
     
+	
+#ifdef WITHMPI	
+
+std::vector<std::string> tokenize(std::string str){
+    std::stringstream strstr(str);
+
+    // use stream iterators to copy the stream to the vector as whitespace separated strings
+    std::istream_iterator<std::string> it(strstr);
+    std::istream_iterator<std::string> end;
+    std::vector<std::string> results(it, end);
+    return results;
+}
+
+
+std::vector<std::string> tokenize(std::string str, char splitter){
+    std::stringstream strstr(str);
+    std::string elem;
+    std::vector<std::string> results;
+    while (getline(strstr, elem, splitter)) {
+        results.push_back(elem);
+    }
+    return results;
+}
+
+
+/**
+*
+*  @brief A reader for the gpu topology config file, in case multiple GPUs across various servers are used
+*
+* @param[in] filename The filename of the config file
+* 
+* \return GPU_Topology
+*
+* struct GPU_Topology
+* {
+*	int num_servers                    ;   // the number of involved servers
+*	int *num_gpus_per_server           ;   // how many GPUs are used in each server
+*	int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
+*	int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+*};
+*
+*/
+struct GPU_Topology read_mpi_topology_config_file(const char * filename)
+{
+	std::vector< std::vector< pair<int,int> > > gpu_mapping(0);
+	int global_gpu_nr=0;
+	ifstream conf_file(filename);
+	if(conf_file.is_open())
+	{
+		std::string line;
+		while(conf_file.good())
+		{
+			getline(conf_file, line);
+			std::vector<std::string> token = tokenize(line);
+			if(token.size() > 1 && token[0][0]!='#')
+			{
+				std::string name = token[0];
+				int target_server  = atoi(token[1].c_str());
+				if(gpu_mapping.size() <= target_server)
+				{
+					gpu_mapping.resize(target_server+1);
+				}
+					
+				for(size_t i=0;i<token.size()-2;i++)
+				{
+					int gpu_nr = atoi(token[i+2].c_str());
+					gpu_mapping[target_server].push_back(make_pair(gpu_nr,global_gpu_nr));
+					global_gpu_nr++;
+				}
+			}
+		}
+	}
+	else
+	{
+		fprintf(stderr,"unable to open mpi topology configuation file %s\n",filename);
+		struct GPU_Topology x;
+		return x;
+	}
+	
+	conf_file.close();
+	
+	struct GPU_Topology topol;
+	topol.num_servers = (int)gpu_mapping.size();
+	topol.num_gpus_per_server = (int  *)malloc(sizeof(int)*topol.num_servers);
+	topol.local_gpu_mapping   = (int **)malloc(sizeof(int*)*topol.num_servers);
+	topol.global_gpu_maping   = (int **)malloc(sizeof(int*)*topol.num_servers);
+	topol.total_num_gpus      = global_gpu_nr;
+	for(int i=0;i<topol.num_servers; i++)
+	{
+		topol.num_gpus_per_server[i] = (int)gpu_mapping[i].size();
+		topol.local_gpu_mapping[i]   = (int*)malloc(sizeof(int) * topol.num_gpus_per_server[i]);
+		topol.global_gpu_maping[i]   = (int*)malloc(sizeof(int) * topol.num_gpus_per_server[i]);
+		
+		for(int j=0; j<topol.num_gpus_per_server[i]; j++)
+		{
+			topol.local_gpu_mapping[i][j] = (int)gpu_mapping[i][j].first;
+			topol.global_gpu_maping[i][j] = (int)gpu_mapping[i][j].second;
+		}
+	}
+	return topol;
+}
+#endif	
+
+
 /**
  * @brief Base class for graph problem enactors.
  */
