@@ -125,6 +125,9 @@ void Usage()
         "  --instrumented If set then kernels keep track of queue-search_depth\n"
         "  and barrier duty (a relative indicator of load imbalance.)\n"
         "  --quick If set will skip the CPU validation code. Default: 0\n"
+		"  --mpi-topology-config=<filename> is expected in case of multiple node-multiple GPU\n"
+		"    to define the topology of the layout. Each line in the topology file is of the format"
+		"    hostname <mpi_rank_id> <gpu_device_id> <gpu_device_id> ..."
         );
 }
 
@@ -411,12 +414,12 @@ void RunTests(Test_Parameter *parameter)
     Csr<VertexId, Value, SizeT>
                  *graph              = (Csr<VertexId, Value, SizeT>*)parameter->graph;
     int           max_grid_size      = parameter -> max_grid_size;
-    int           num_gpus           = parameter -> num_gpus;
+    int           num_gpus           = parameter -> num_gpus;          //init devices, num_gpus_global not needed
     double        max_queue_sizing   = parameter -> max_queue_sizing;
     double        max_in_sizing      = parameter -> max_in_sizing;
     ContextPtr   *context            = (ContextPtr*)parameter -> context;
     std::string   partition_method   = parameter -> partition_method;
-    int          *gpu_idx            = parameter -> gpu_idx;
+    int          *gpu_idx            = parameter -> gpu_idx;            //list of local device ids
     cudaStream_t *streams            = parameter -> streams;
     float         partition_factor   = parameter -> partition_factor;
     int           partition_seed     = parameter -> partition_seed;
@@ -437,15 +440,23 @@ void RunTests(Test_Parameter *parameter)
     VertexId     *ref_node_id        = new VertexId[graph->nodes];
     Value        *ref_check          = (g_quick) ? NULL : ref_rank;
 
-    for (int gpu=0; gpu<num_gpus; gpu++)
+
+#ifdef WITHMPI
+
+	int num_gpu_local = parameter -> mpi_topology -> num_gpus_per_server[parameter -> mpi_topology -> local_rank];
+
+    for (int gpu=0; gpu<num_gpu_local; gpu++)
     {
         size_t dummy;
         cudaSetDevice(gpu_idx[gpu]);
         cudaMemGetInfo(&(org_size[gpu]), &dummy);
     }
 
-    // Allocate PageRank enactor map
-    PrEnactor* enactor = new PrEnactor(num_gpus, gpu_idx);
+	// Allocate PageRank enactor map
+	PrEnactor* enactor = new PrEnactor(num_gpu_local,
+		 							parameter -> mpi_topology -> total_num_gpus,
+									gpu_idx
+							 );	
 
     // Allocate problem on GPU
     PrProblem *problem = new PrProblem;
@@ -453,8 +464,46 @@ void RunTests(Test_Parameter *parameter)
         g_stream_from_host,
         graph,
         NULL,
-        num_gpus,
-        gpu_idx,
+		parameter->mpi_topology,	
+        partition_method,
+        streams,
+        max_queue_sizing,
+        max_in_sizing,
+        partition_factor,
+        partition_seed), "Problem pr Initialization Failed", __FILE__, __LINE__);
+		
+	
+	
+    util::GRError(enactor->Init(context, problem, traversal_mode, /*max_iter,*/ max_grid_size), "PR Enactor Init failed", __FILE__, __LINE__);
+
+    Stats *stats = new Stats("GPU PageRank");
+
+    long long           total_queued = 0;
+    long long           num_iter     = 0;
+    double              avg_duty     = 0.0;
+    float               elapsed      = 0.0f;
+
+#else
+
+    for (int gpu=0; gpu<num_gpus; gpu++)
+    {
+        size_t dummy;
+        cudaSetDevice(gpu_idx[gpu]);
+        cudaMemGetInfo(&(org_size[gpu]), &dummy);
+    }
+	
+	// Allocate PageRank enactor map
+	PrEnactor* enactor = new PrEnactor(num_gpus, parameter -> num_gpus_global, gpu_idx);
+
+
+    // Allocate problem on GPU
+    PrProblem *problem = new PrProblem;
+    util::GRError(problem->Init(
+        g_stream_from_host,
+        graph,
+        NULL,
+        num_gpus,  //local number of gpus
+        gpu_idx,   //list of local gpu indices	
         partition_method,
         streams,
         max_queue_sizing,
@@ -469,6 +518,10 @@ void RunTests(Test_Parameter *parameter)
     long long           num_iter     = 0;
     double              avg_duty     = 0.0;
     float               elapsed      = 0.0f;
+
+
+#endif
+
 
     // Perform PageRank
     CpuTimer cpu_timer;
@@ -539,6 +592,47 @@ void RunTests(Test_Parameter *parameter)
         avg_duty,
         num_iter);
 
+#ifdef WITHMPI
+	printf("\n\tMemory Usage(B)\t");
+    for (int gpu=0;gpu<num_gpu_local;gpu++)
+    if (num_gpu_local>1) {if (gpu!=0) printf(" #keys%d,0\t #keys%d,1\t #ins%d,0\t #ins%d,1",gpu,gpu,gpu,gpu); else printf(" #keys%d,0\t #keys%d,1", gpu, gpu);}
+    else printf(" #keys%d,0\t #keys%d,1", gpu, gpu);
+    if (num_gpu_local>1) printf(" #keys%d",num_gpus);
+    printf("\n");
+    double max_queue_sizing_[2] = {0,0}, max_in_sizing_=0;
+    for (int gpu=0; gpu<num_gpu_local; gpu++)
+    {   
+        size_t gpu_free,dummy;
+        cudaSetDevice(gpu_idx[gpu]);
+        cudaMemGetInfo(&gpu_free,&dummy);
+        printf("GPU_%d\t %ld",gpu_idx[gpu],org_size[gpu]-gpu_free);
+        for (int i=0;i<parameter -> mpi_topology ->total_num_gpus;i++)
+        {   
+            for (int j=0; j<2; j++)
+            {   
+                SizeT x=problem->data_slices[gpu]->frontier_queues[i].keys[j].GetSize();
+                printf("\t %lld", (long long) x); 
+                double factor = 1.0*x/(num_gpu_local>1?problem->graph_slices[gpu]->in_counter[i]:problem->graph_slices[gpu]->nodes);
+                if (factor > max_queue_sizing_[j]) max_queue_sizing_[j]=factor;
+            }   
+            if (num_gpu_local>1 && i!=0 )
+            for (int t=0;t<2;t++)
+            {   
+                SizeT x=problem->data_slices[gpu][0].keys_in[t][i].GetSize();
+                printf("\t %lld", (long long) x); 
+                double factor = 1.0*x/problem->graph_slices[gpu]->in_counter[i];
+                if (factor > max_in_sizing_) max_in_sizing_=factor;
+            }   
+        }   
+		//not sure if the line below produces the right output
+        if (num_gpu_local>1) printf("\t %lld", (long long)(problem->data_slices[gpu]->frontier_queues[num_gpu_local].keys[0].GetSize()));
+        printf("\n");
+    }   
+    printf("\t queue_sizing =\t %lf \t %lf", max_queue_sizing_[0], max_queue_sizing_[1]);
+    if (num_gpu_local>1) printf("\t in_sizing =\t %lf", max_in_sizing_);
+    printf("\n");
+#else
+
     printf("\n\tMemory Usage(B)\t");
     for (int gpu=0;gpu<num_gpus;gpu++)
     if (num_gpus>1) {if (gpu!=0) printf(" #keys%d,0\t #keys%d,1\t #ins%d,0\t #ins%d,1",gpu,gpu,gpu,gpu); else printf(" #keys%d,0\t #keys%d,1", gpu, gpu);}
@@ -576,7 +670,8 @@ void RunTests(Test_Parameter *parameter)
     printf("\t queue_sizing =\t %lf \t %lf", max_queue_sizing_[0], max_queue_sizing_[1]);
     if (num_gpus>1) printf("\t in_sizing =\t %lf", max_in_sizing_);
     printf("\n");
-
+#endif
+	
     // Cleanup
     if (stats      ) {delete   stats      ; stats       = NULL;}
     if (org_size   ) {delete   org_size   ; org_size    = NULL;}
@@ -664,10 +759,6 @@ int main( int argc, char ** argv)
         return 1;
     }   
 
-
-
-
-
 #ifdef WITHMPI
 	int rank, num_ranks;
 	MPI_Init(&argc,&argv);
@@ -675,23 +766,29 @@ int main( int argc, char ** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
-// Get the name of the processor
+    // Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
 	printf("MPI processor name of rank %i (of %i): %s\n",rank, num_ranks,processor_name);fflush(stdout);
-	struct gunrock::app::GPU_Topology mpi_topology;
+	struct gunrock::app::GPU_Topology * mpi_topology = new struct gunrock::app::GPU_Topology;
     if (args.CheckCmdLineFlag("mpi-topology-config"))
     {   
 		std::string config_filename;
 		args.GetCmdLineArgument<string>("mpi-topology-config", config_filename);
-		mpi_topology = gunrock::app::read_mpi_topology_config_file(config_filename.c_str());
+		struct gunrock::app::GPU_Topology topo = gunrock::app::read_mpi_topology_config_file(config_filename.c_str());
+		mpi_topology->num_servers = topo.num_servers;
+		mpi_topology->num_gpus_per_server = topo.num_gpus_per_server;
+		mpi_topology->global_gpu_maping = topo.global_gpu_maping;
+		mpi_topology->local_gpu_mapping = topo.local_gpu_mapping;
+		mpi_topology->total_num_gpus = topo.total_num_gpus;
+		mpi_topology->local_rank = rank;
 		
-		num_gpus = mpi_topology.num_gpus_per_server[rank];
+		num_gpus = mpi_topology->num_gpus_per_server[rank];
 		gpu_idx  = new int[num_gpus];
         for (int i=0; i<num_gpus; i++)
 		{
-            gpu_idx[i] = mpi_topology.local_gpu_mapping[rank][i];
+            gpu_idx[i] = mpi_topology->local_gpu_mapping[rank][i];
 		}
 	}
 	else
@@ -700,13 +797,14 @@ int main( int argc, char ** argv)
 		MPI_Finalize();
 		return 0;
 	}
-    streams  = new cudaStream_t[num_gpus * num_gpus * 2]; 
+
+	streams  = new cudaStream_t[num_gpus * num_gpus * 2]; 
     context  = new ContextPtr  [num_gpus * num_gpus];
-	
+
 	std::stringstream gpu_output_stream;
 	gpu_output_stream << "MPI rank " << rank << " using "<< num_gpus << " gpus: ";
-	
-    for (int gpu=0;gpu<num_gpus;gpu++)
+
+    for (int gpu=0; gpu < num_gpus; gpu++)
     {  
 		gpu_output_stream << " " << gpu_idx[gpu]<< " ";
         util::SetDevice(gpu_idx[gpu]);
@@ -725,13 +823,15 @@ int main( int argc, char ** argv)
 	//
     Test_Parameter *parameter = new Test_Parameter;
     parameter -> Init(args);
-    parameter -> num_gpus    = mpi_topology.total_num_gpus;
-    parameter -> context     = context;
-    parameter -> gpu_idx     = gpu_idx;
-    parameter -> streams     = streams;	
-	
+	parameter -> mpi_topology    = mpi_topology;
+    parameter -> num_gpus_global = mpi_topology->total_num_gpus;
+	parameter -> num_gpus        = num_gpus;
+    parameter -> context         = context;
+    parameter -> gpu_idx         = gpu_idx;
+    parameter -> streams         = streams;	
 	
 #else
+	
     if (args.CheckCmdLineFlag  ("device"))
     {   
         std::vector<int> gpus;
@@ -766,13 +866,13 @@ int main( int argc, char ** argv)
 	//
     Test_Parameter *parameter = new Test_Parameter;
     parameter -> Init(args);
-    parameter -> num_gpus    = num_gpus;
-    parameter -> context     = context;
-    parameter -> gpu_idx     = gpu_idx;
-    parameter -> streams     = streams;
+    parameter -> num_gpus_global = num_gpus;
+    parameter -> num_gpus        = num_gpus;
+    parameter -> context         = context;
+    parameter -> gpu_idx         = gpu_idx;
+    parameter -> streams         = streams;
+
 #endif	
-	
-	
 	
     // Parse graph-contruction params
     std::string graph_type = argv[1];
@@ -784,11 +884,10 @@ int main( int argc, char ** argv)
         return 1;
     }   
 
-
     typedef int VertexId;							// Use as the node identifier type
-    typedef float Value;								// Use as the value type
+    typedef float Value;							// Use as the value type
     typedef int SizeT;								// Use as the graph size type
-    Csr<VertexId, Value, SizeT> graph(false);         // default value for stream_from_host is false
+    Csr<VertexId, Value, SizeT> graph(false);       // default value for stream_from_host is false
 
 	if (graph_type == "market") {
 
@@ -805,7 +904,8 @@ int main( int argc, char ** argv)
 			return 1;
 		}
 
-	} else if (graph_type == "rmat")
+	}
+	else if (graph_type == "rmat")
     {
         // parse rmat parameters
         SizeT rmat_nodes = 1 << 10;

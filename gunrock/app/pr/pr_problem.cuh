@@ -17,6 +17,8 @@
 #include <gunrock/app/problem_base.cuh>
 #include <gunrock/util/memset_kernel.cuh>
 
+#include <assert.h>
+
 namespace gunrock {
 namespace app {
 namespace pr {
@@ -248,6 +250,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             Csr<VertexId, Value, SizeT>
                          *inversgraph      = NULL,
             int           num_gpus         = 1,
+            int           num_gpus_global  = 1,
             int          *gpu_idx          = NULL,
             std::string   partition_method = "random",
             cudaStream_t *streams          = NULL,
@@ -272,6 +275,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
         /**
          * Allocate output labels/preds
          */
+
         cudaError_t retval = cudaSuccess;
         data_slices = new util::Array1D<SizeT, DataSlice>[this->num_gpus];
         SizeT *local_nodes = new SizeT[this->num_gpus];
@@ -320,6 +324,123 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
         return retval;
     }
 
+
+#ifdef WITHMPI
+   /**
+    * @brief PRProblem initialization
+    *
+    * @param[in] stream_from_host Whether to stream data from host.
+    * @param[in] graph Reference to the CSR graph object we process on. @see Csr
+    * @param[in] _num_gpus Number of the GPUs used.
+    *
+    * \return cudaError_t object which indicates the success of all CUDA function calls.
+    */
+   cudaError_t Init(
+           bool          stream_from_host,       // Only meaningful for single-GPU
+           Csr<VertexId, Value, SizeT> 
+                        *graph,
+           Csr<VertexId, Value, SizeT>
+                        *inversgraph      = NULL,
+		   struct gunrock::app::GPU_Topology * mpi_topology = NULL,
+           std::string   partition_method = "random",
+           cudaStream_t *streams          = NULL,
+           float         queue_sizing     = 2.0f,
+           float         in_sizing        = 1.0f,
+           float         partition_factor = -1.0f,
+           int           partition_seed   = -1) 
+   {
+
+
+	   int num_gpus_global = mpi_topology -> total_num_gpus;
+	   int rank            = mpi_topology -> local_rank;
+	   int num_gpus_local  = mpi_topology -> num_gpus_per_server[rank];
+	   int * local_gpu_idx = mpi_topology -> local_gpu_mapping[rank];
+	   
+	   int start_gpu_index = 0;
+	   for(int i=0;i<rank-1;i++)
+	   {
+		   start_gpu_index += mpi_topology -> num_gpus_per_server[i];
+	   }
+
+	   
+       ProblemBase<VertexId, SizeT, Value, true, false, false, false, false, true> :: Init(
+           stream_from_host,
+           graph,
+           inversgraph,
+		   start_gpu_index,
+           local_gpu_idx,
+		   mpi_topology,
+           partition_method,
+           queue_sizing,
+           partition_factor,
+           partition_seed);
+
+       // No data in DataSlice needs to be copied from host
+
+       /**
+        * Allocate output labels/preds
+        */
+       cudaError_t retval = cudaSuccess;
+       data_slices = new util::Array1D<SizeT, DataSlice>[num_gpus_local];  //we need in this node only as many data slices as GPUs
+       SizeT *local_nodes = new SizeT[num_gpus_global];
+
+       if (num_gpus_global > 1)
+       {
+           for (int gpu=0; gpu<num_gpus_global; gpu++)
+               local_nodes[gpu] = 0;
+           for (SizeT v=0; v<graph->nodes; v++)
+               local_nodes[this->partition_tables[0][v]] ++;  //this->partition_tables[0][v] indicates which gpu is responsible for a node (global gpu enumeration)
+           for (int gpu_=0; gpu_ < num_gpus_local;  gpu_++)
+           for (int peer=0; peer < num_gpus_global; peer++)
+           {
+			   int gpu = gpu_ + start_gpu_index;  //iterate only over those graph slices processed in this node
+               int peer_;
+               if (gpu == peer) peer_ = 0;
+               else peer_ = gpu<peer? peer: peer+1;
+               SizeT max_nodes = local_nodes[gpu] > local_nodes[peer]? local_nodes[gpu] : local_nodes[peer];
+               this->graph_slices[gpu_]->in_counter[peer_] = max_nodes;
+               this->graph_slices[gpu_]->out_counter[peer_] = max_nodes;
+           }
+       }
+
+	   int num_vertex_associate = 0;
+	   int num_value__associate = num_gpus_global>1? 1 : 0;
+       do {
+           for (int gpu=0; gpu < num_gpus_local; gpu++)
+           {
+               data_slices[gpu].SetName("data_slices[]");
+			   //check if GPU is available and 1 bit can be allocated on host and device
+               if (retval = util::SetDevice(local_gpu_idx[gpu])) return retval;
+               if (retval = data_slices[gpu].Allocate(1, util::DEVICE | util::HOST)) return retval;
+			   
+               DataSlice* data_slice_ = data_slices[gpu].GetPointer(util::HOST);
+			   //we only need 2*num_gpus_local cuda streams for each GPU, since non-local communication is handeled via MPI
+               data_slice_->streams.SetPointer(&streams[gpu*num_gpus_local*2], num_gpus_local*2);   
+               if (num_gpus_global > 1) data_slice_->local_nodes = local_nodes[gpu+start_gpu_index];
+               if (retval = data_slice_->Init(
+                   num_gpus_global,
+                   this->gpu_idx[gpu],
+                   num_vertex_associate,  //num_vertex_associate
+                   num_value__associate,  //num_value__associate
+                   &(this->sub_graphs[gpu]),
+                   num_gpus_global>1? this->graph_slices[gpu]->in_counter .GetPointer(util::HOST) : NULL,
+                   num_gpus_global>1? this->graph_slices[gpu]->out_counter.GetPointer(util::HOST) : NULL,
+                   queue_sizing,
+                   in_sizing)) return retval;
+           }
+       } while (0);
+
+	   this -> mpi_ring_buffer = new struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value>(num_gpus_global,4,num_vertex_associate,num_value__associate); //ring buffer length = 4
+	   register_mpi_datatypes<VertexId>(& (this -> mpi_ring_buffer -> mpi_vertex_type));	
+	   register_mpi_datatypes<Value>(& (this -> mpi_ring_buffer -> mpi_value__type));
+
+       delete[] local_nodes; local_nodes = NULL;
+       return retval;
+   }
+
+#endif
+
+
     /**
      *  @brief Performs any initialization work needed for PR problem type. Must be called prior to each PR iteration.
      *
@@ -338,17 +459,27 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             FrontierType frontier_type, // The frontier type (i.e., edge/vertex/mixed)
             double   queue_sizing)
     {
+		int num_gpus_local  = this->num_gpus;
+		int num_gpus_global = this->num_gpus;
+#ifdef WITHMPI
+		if(num_gpus_local==-1)
+		{
+			num_gpus_local  = this->mpi_topology->num_gpus_per_server[this->mpi_topology->local_rank];
+			num_gpus_global = this->mpi_topology->total_num_gpus;
+		}	
+#endif
+		
         cudaError_t retval = cudaSuccess;
-        SizeT *temp_in_counter = new SizeT[this->num_gpus+1];
+        SizeT *temp_in_counter = new SizeT[num_gpus_global+1];
 
-        for (int gpu = 0; gpu < this->num_gpus; ++gpu) {
+        for (int gpu = 0; gpu < num_gpus_local; ++gpu) {
             SizeT nodes = this->sub_graphs[gpu].nodes;
             //SizeT edges = this->sub_graphs[gpu].edges;
 
             // Set device
             if (retval = util::SetDevice(this->gpu_idx[gpu])) return retval;
 
-            for (int peer = 1; peer < this->num_gpus; peer++)
+            for (int peer = 1; peer < num_gpus_global; peer++)
             {
                 temp_in_counter[peer] = this->graph_slices[gpu]->in_counter[peer];
                 this->graph_slices[gpu]->in_counter[peer]=1;
@@ -356,7 +487,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
 
             // Allocate output page ranks if necessary
             if (retval = data_slices[gpu]->Reset(frontier_type, this->graph_slices[gpu], queue_sizing, false)) return retval;
-            for (int peer = 1; peer < this->num_gpus; peer++)
+            for (int peer = 1; peer < num_gpus_global; peer++)
                 this->graph_slices[gpu]->in_counter[peer] = temp_in_counter[peer];
 
             if (data_slices[gpu]->rank_curr.GetPointer(util::DEVICE) == NULL)
@@ -387,7 +518,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             util::MemsetKernel<<<128, 128>>>(
                 data_slices[gpu]->degrees  .GetPointer(util::DEVICE), 0, nodes);
             
-            if (this->num_gpus == 1)
+            if (this->num_gpus == 1)  //only one iff num_gpus_global==1 && num_gpus_local==1
             {
                 util::MemsetMadVectorKernel <<<128, 128>>>(
                     data_slices[gpu]->degrees.GetPointer(util::DEVICE), 
