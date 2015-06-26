@@ -77,6 +77,64 @@ struct PRMarkerFunctor
     }
 };
 
+
+
+
+
+
+
+
+
+ /**
+ * @brief Structure contains device functions in PR graph traverse.
+ *
+ * @tparam VertexId    Type of signed integer to use as vertex id (e.g., uint32)
+ * @tparam SizeT       Type of unsigned integer to use for array indexing. (e.g., uint32)
+ * @tparam ProblemData Problem data type which contains data slice for PR problem
+ *
+ */
+template<
+    typename VertexId, typename SizeT, typename Value, typename ProblemData>
+struct StaleInitFunctor
+{
+    typedef typename ProblemData::DataSlice DataSlice;
+ 
+    static __device__ __forceinline__ bool CondFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+         problem->rank_stale[node] = problem->rank_next[node] - problem->rank_stale[node];
+         return false;
+    }
+
+    static __device__ __forceinline__ void ApplyFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+
+    }
+};
+
+template<
+    typename VertexId, typename SizeT, typename Value, typename ProblemData>
+struct StaleUpdateFunctor
+{
+    typedef typename ProblemData::DataSlice DataSlice;
+
+    static __device__ __forceinline__ bool CondFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+        problem->rank_next[node] = problem->rank_stale[node];
+        return false;
+    }
+
+    static __device__ __forceinline__ void ApplyFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+
+    }
+};
+
+
+
 /**
  * @brief Structure contains device functions in PR graph traverse.
  *
@@ -155,6 +213,8 @@ struct PRFunctor
         //problem->rank_next[node] = (delta * problem->rank_next[node]) + (1.0-delta) * ((src_node == node || src_node == -1) ? 1 : 0);
         problem->rank_next[node] = (1.0 - delta) + delta * problem->rank_next[node];
         Value diff = fabs(problem->rank_next[node] - problem->rank_curr[node]);
+
+
 
         //if (TO_TRACK)
         //if (to_track(node)) printf("%d \tr[%d] \t%f \t-> %f \t(%f)\n", problem->gpu_idx, node, problem->rank_curr[node], problem->rank_next[node], old_value); 

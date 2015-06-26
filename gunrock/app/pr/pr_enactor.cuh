@@ -657,6 +657,10 @@ public:
     typedef PRFunctor      <VertexId, SizeT, Value, Problem> PrFunctor;
     typedef PRMarkerFunctor<VertexId, SizeT, Value, Problem> PrMarkerFunctor;
 
+    typedef StaleUpdateFunctor      <VertexId, SizeT, Value, Problem> StaleUpdateFunctor;
+    typedef StaleInitFunctor      <VertexId, SizeT, Value, Problem> StaleInitFunctor;
+
+
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -672,11 +676,51 @@ public:
         ContextPtr                     context,
         cudaStream_t                   stream)
     {
+      int MAX_MICRO=1;
+
+      if (enactor_stats -> iteration == 0){
+
+          util::MemsetKernel<<<128, 128, 0, stream>>>(
+           data_slice->rank_stale.GetPointer(util::DEVICE),
+          (Value)0.0, graph_slice->nodes);
+      }
+
+	  for(int microIter=0; microIter<MAX_MICRO; microIter++)
+	  {
         //Print_Const<DataSlice><<<1,1,0,stream>>>(d_data_slice);
         if (enactor_stats -> iteration != 0)
         {
+            if(microIter==0)
+            {
+                frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
+                frontier_attribute->queue_reset = true;
+
+                gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleInitFunctor>
+                <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
+                    enactor_stats->iteration,
+                    frontier_attribute->queue_reset,
+                    frontier_attribute->queue_index,
+                    frontier_attribute->queue_length,
+                    frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
+                    NULL,
+                    NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
+                    d_data_slice,
+                    NULL,
+                    work_progress[0],
+                    frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
+                    frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
+                    enactor_stats->filter_kernel_stats);
+
+                    cudaThreadSynchronize();
+            }
+
+
+//            printf("%d\n",data_slice -> edge_map_queue_len);
+
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
+            frontier_attribute->queue_reset = true;
+
 
             //printf("Filter start.\n");fflush(stdout); 
              // filter kernel
@@ -699,24 +743,57 @@ public:
             //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "filter_forward::Kernel failed", __FILE__, __LINE__))) break;
             //cudaEventQuery(throttle_event); // give host memory mapped visibility to GPU updates     
 
-            //printf("Filter end.\n");fflush(stdout); 
-            //enactor_stats->iteration++;
             frontier_attribute->queue_index++;
 
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
-            //num_elements = queue_length;
-
-            //swap rank_curr and rank_next
-            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
-                data_slice->rank_curr.GetPointer(util::DEVICE),
-                data_slice->rank_next.GetPointer(util::DEVICE), 
-                graph_slice->nodes);
-            util::MemsetKernel<<<128, 128, 0, stream>>>(
-                data_slice->rank_next.GetPointer(util::DEVICE),
-                (Value)0.0, graph_slice->nodes);
-
             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
             data_slice->PR_queue_length = frontier_attribute->queue_length;
+
+
+            //swap rank_curr and rank_next
+//            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
+//                data_slice->rank_curr.GetPointer(util::DEVICE),
+//                data_slice->rank_next.GetPointer(util::DEVICE), 
+//                graph_slice->nodes);
+//ODED            util::MemsetKernel<<<128, 128, 0, stream>>>(
+ //               data_slice->rank_next.GetPointer(util::DEVICE),
+//                (Value)0.0, graph_slice->nodes);
+
+            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
+                data_slice->rank_curr.GetPointer(util::DEVICE),
+                data_slice->rank_next.GetPointer(util::DEVICE),
+                graph_slice->nodes);
+            cudaThreadSynchronize();
+            util::MemsetKernel<<<128, 128, 0, stream>>>(
+                          data_slice->rank_next.GetPointer(util::DEVICE),
+                          (Value)0.0, graph_slice->nodes);
+            cudaThreadSynchronize();
+
+            frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
+            frontier_attribute->queue_reset = true;
+            if(microIter>=0){
+                gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleUpdateFunctor>
+                <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
+                    enactor_stats->iteration,
+                    frontier_attribute->queue_reset,
+                    frontier_attribute->queue_index,
+                    frontier_attribute->queue_length,
+                    frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
+                    NULL,
+                    NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
+                    d_data_slice,
+                    NULL,
+                    work_progress[0],
+                    frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
+                    frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
+                    enactor_stats->filter_kernel_stats);
+
+                //printf("\n\n\n");
+            }
+
+            cudaThreadSynchronize();
+
+
             //enactor_stats      -> Accumulate(
             //    work_progress  -> GetQueueLengthPointer<unsigned int,SizeT>(frontier_attribute->queue_index), stream);
             //printf("queue_length = %d\n", frontier_attribute->queue_length);fflush(stdout);
@@ -735,13 +812,13 @@ public:
         }
 
         //if (enactor_stats->retval = work_progress->SetQueueLength(frontier_attribute->queue_index, edge_map_queue_len)) return;
-        frontier_attribute->queue_length = data_slice->edge_map_queue_len;
         //if (enactor_stats->iteration == 0) util::cpu_mt::PrintGPUArray("keys", frontier_queue->keys[frontier_attribute->selector].GetPointer(util::DEVICE), frontier_attribute->queue_length, thread_num, enactor_stats->iteration, peer_, stream);
         //if (enactor_stats->iteration == 0) util::cpu_mt::PrintGPUArray<SizeT, SizeT>("degrees", data_slice->degrees.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, peer_, stream);
         //util::cpu_mt::PrintGPUArray<SizeT, Value>("ranks", data_slice->rank_curr.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, peer_, stream);
 
         //printf("Advance start.\n");fflush(stdout); 
         // Edge Map
+        frontier_attribute->queue_length = data_slice->edge_map_queue_len;
         frontier_attribute->queue_reset = true;
         gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrFunctor>(
             //d_done,
@@ -773,7 +850,33 @@ public:
         if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
         enactor_stats->total_queued[0] += frontier_attribute->queue_length;
         frontier_attribute->queue_length = data_slice->edge_map_queue_len;
-        //printf("Advance end.\n");fflush(stdout); 
+
+     
+        cudaThreadSynchronize();
+        enactor_stats->iteration++;
+
+        if (data_slice->PR_queue_length==0){
+                enactor_stats->iteration += MAX_MICRO-1-microIter;
+            break;
+        }
+
+        if (enactor_stats->iteration > data_slice->max_iter)
+            break;
+	  } 
+
+      cudaThreadSynchronize();
+      util::MemsetKernel<<<128, 128, 0, stream>>>(
+                    data_slice->rank_stale.GetPointer(util::DEVICE),
+                    (Value)0.0, graph_slice->nodes);
+cudaThreadSynchronize();
+    util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
+        data_slice->rank_stale.GetPointer(util::DEVICE),
+        data_slice->rank_next.GetPointer(util::DEVICE),
+        graph_slice->nodes);
+cudaThreadSynchronize();
+        enactor_stats->iteration--;
+
+		//printf("Advance end.\n");fflush(stdout); 
 
         //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "edge_map_forward::Kernel failed", __FILE__, __LINE__))) break;
         //cudaEventQuery(throttle_event);                                 // give host memory mapped visibility to GPU updates 

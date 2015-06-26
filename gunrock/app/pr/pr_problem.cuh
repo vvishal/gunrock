@@ -52,7 +52,9 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
     {
         // device storage arrays
         util::Array1D<SizeT, Value   > rank_curr;           /**< Used for ping-pong page rank value */
-        util::Array1D<SizeT, Value   > rank_next;           /**< Used for ping-pong page rank value */       
+        util::Array1D<SizeT, Value   > rank_next;           /**< Used for ping-pong page rank value */
+        util::Array1D<SizeT, Value   > rank_stale;           /**< Used for ping-pong page rank value */
+
         util::Array1D<SizeT, SizeT   > degrees;             /**< Used for keeping out-degree for each vertex */
         util::Array1D<SizeT, SizeT   > degrees_pong;
         util::Array1D<SizeT, SizeT   > labels;
@@ -74,6 +76,8 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
         {
             rank_curr   .SetName("rank_curr"   );
             rank_next   .SetName("rank_next"   );
+            rank_stale  .SetName("rank_stale"  );
+
             degrees     .SetName("degrees"     );
             degrees_pong.SetName("degrees_pong");
             labels      .SetName("labels"      );
@@ -97,6 +101,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             if (util::SetDevice(this->gpu_idx)) return;
             rank_curr   .Release();
             rank_next   .Release();
+            rank_stale  .Release();
             degrees     .Release();
             degrees_pong.Release();
             labels      .Release();
@@ -169,6 +174,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             // Create SoA on device
             if (retval = rank_curr   .Allocate(nodes, util::DEVICE)) return retval;
             if (retval = rank_next   .Allocate(nodes, util::DEVICE)) return retval;
+            if (retval = rank_stale  .Allocate(nodes, util::DEVICE)) return retval;
             if (retval = degrees     .Allocate(nodes, util::DEVICE)) return retval;
             if (retval = degrees_pong.Allocate(nodes+1, util::DEVICE)) return retval;
             if (retval = node_ids    .Allocate(nodes, util::DEVICE)) return retval;
@@ -365,6 +371,9 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             if (data_slices[gpu]->rank_next.GetPointer(util::DEVICE) == NULL)
                 if (retval = data_slices[gpu]->rank_next.Allocate(nodes, util::DEVICE)) return retval;
 
+            if (data_slices[gpu]->rank_stale.GetPointer(util::DEVICE) == NULL)
+                if (retval = data_slices[gpu]->rank_stale.Allocate(nodes, util::DEVICE)) return retval;
+
             if (data_slices[gpu]->node_ids .GetPointer(util::DEVICE) == NULL)
                 if (retval = data_slices[gpu]->node_ids .Allocate(nodes, util::DEVICE)) return retval;
 
@@ -382,6 +391,10 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
                 data_slices[gpu]->rank_next.GetPointer(util::DEVICE), (Value)(1.0 - delta), nodes);
             util::MemsetKernel<<<128, 128>>>(
                 data_slices[gpu]->rank_curr.GetPointer(util::DEVICE), (Value)(1.0 - delta), nodes);
+
+            util::MemsetKernel<<<128, 128>>>(
+                data_slices[gpu]->rank_stale.GetPointer(util::DEVICE), (Value)(1.0 - delta), nodes);
+
             
             // Compute degrees
             util::MemsetKernel<<<128, 128>>>(
