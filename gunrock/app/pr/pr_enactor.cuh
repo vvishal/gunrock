@@ -190,7 +190,7 @@ namespace pr {
             if (markers[x] != 1 && gpu != 0)
             {
                 gpu = num_gpus;
-            } 
+            }
             for (int i=0; i<num_gpus; i++)
                 s_marker[i][x] = (i==gpu)?1:0;
             x+=STRIDE;
@@ -281,8 +281,8 @@ struct R0DIteration : public IterationBase <
     false> //UPDATE_PREDECESSORS
 {
 public:
-    typedef typename Enactor::SizeT      SizeT     ;    
-    typedef typename Enactor::Value      Value     ;    
+    typedef typename Enactor::SizeT      SizeT     ;
+    typedef typename Enactor::Value      Value     ;
     typedef typename Enactor::VertexId   VertexId  ;
     typedef typename Enactor::Problem    Problem   ;
     typedef typename Problem::DataSlice  DataSlice ;
@@ -316,7 +316,7 @@ public:
             frontier_attribute->queue_length = data_slice->num_gpus>1 ? data_slice->local_nodes : graph_slice->nodes;
         }
     }
- 
+
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -333,7 +333,7 @@ public:
         cudaStream_t                   stream)
     {
         //Print_Const<DataSlice><<<1,1,0,stream>>>(d_data_slice);
-        SizeT num_valid_node = frontier_attribute->queue_length; 
+        SizeT num_valid_node = frontier_attribute->queue_length;
 
         //util::DisplayDeviceResults(problem->graph_slices[0]->frontier_queues.d_keys[selector],
         //    num_elements);
@@ -371,7 +371,7 @@ public:
             false);
 
         //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(),
-        //      "edge_map_forward::Kernel failed", __FILE__, __LINE__))) break; 
+        //      "edge_map_forward::Kernel failed", __FILE__, __LINE__))) break;
         enactor_stats      -> Accumulate(
             work_progress  -> GetQueueLengthPointer<unsigned int,SizeT>(frontier_attribute->queue_index+1), stream);
 
@@ -451,7 +451,7 @@ public:
             ADVANCE_TYPE,
             express);
         return retval;
-    }    
+    }
 
     template <int NUM_VERTEX_ASSOCIATES, int NUM_VALUE__ASSOCIATES>
     static void Expand_Incoming(
@@ -472,22 +472,23 @@ public:
             num_elements,
             keys_in,
             data_slice->degrees.GetPointer(util::DEVICE));
-        num_elements = 0; 
+        num_elements = 0;
     }
-	
+
     static bool Stop_Condition(
         EnactorStats   *enactor_stats,
         FrontierAttribute<SizeT> *frontier_attribute,
         util::Array1D<SizeT, DataSlice> *data_slice,
         int num_gpus)
-    {    
+    {
+
         //printf("CC Stop checked\n");fflush(stdout);
         for (int gpu = 0; gpu < num_gpus*num_gpus; gpu++)
         if (enactor_stats[gpu].retval != cudaSuccess)
-        {    
+        {
             printf("(CUDA error %d @ GPU %d: %s\n", enactor_stats[gpu].retval, gpu%num_gpus, cudaGetErrorString(enactor_stats[gpu].retval)); fflush(stdout);
             return true;
-        }    
+        }
 
         /*for (int gpu = 0; gpu< num_gpus*num_gpus; gpu++)
         if (enactor_stats[gpu].iteration == 0)
@@ -498,31 +499,31 @@ public:
 
         for (int gpu=0; gpu<num_gpus; gpu++)
             if (data_slice[gpu]->to_continue && frontier_attribute[gpu*num_gpus].queue_length !=0)
-        {    
+        {
             //printf("data_slice[%d]->to_continue, frontier_attribute[%d].queue_length = %d\n", gpu, gpu*num_gpus, frontier_attribute[gpu*num_gpus].queue_length);fflush(stdout);
             return false;
-        }    
-     
-        for (int gpu=0; gpu<num_gpus; gpu++)
-        for (int peer=1; peer<num_gpus; peer++)
-        for (int i=0; i<2; i++) 
-        if (data_slice[gpu]->in_length[i][peer]!=0)
-        {    
-            //printf("data_slice[%d]->in_length[%d][%d] = %d\n", gpu, i, peer, data_slice[gpu]->in_length[i][peer]);fflush(stdout);
-            return false;
-        }    
+        }
 
         for (int gpu=0; gpu<num_gpus; gpu++)
         for (int peer=1; peer<num_gpus; peer++)
-        if (data_slice[gpu]->out_length[peer]!=0) 
-        {    
+        for (int i=0; i<2; i++)
+        if (data_slice[gpu]->in_length[i][peer]!=0)
+        {
+            //printf("data_slice[%d]->in_length[%d][%d] = %d\n", gpu, i, peer, data_slice[gpu]->in_length[i][peer]);fflush(stdout);
+            return false;
+        }
+
+        for (int gpu=0; gpu<num_gpus; gpu++)
+        for (int peer=1; peer<num_gpus; peer++)
+        if (data_slice[gpu]->out_length[peer]!=0)
+        {
             //printf("data_slice[%d]->out_length[%d] = %d\n", gpu, peer, data_slice[gpu]->out_length[peer]); fflush(stdout);
             return false;
-        }    
+        }
         //printf("CC to stop\n");fflush(stdout);
         return true;
-    }    
-	
+    }
+
     template <
         int NUM_VERTEX_ASSOCIATES,
         int NUM_VALUE__ASSOCIATES>
@@ -548,14 +549,14 @@ public:
                 data_slice[0]->out_length[peer_] = 0;
             return;
         }
- 
+
         int block_size = 256;
         int grid_size  = num_elements / block_size;
         int peer_      = 0;
         if ((num_elements % block_size)!=0) grid_size ++;
         if (grid_size > 512) grid_size = 512;
-       
-        //util::MemsetKernel<<<128, 128, 0, stream>>>(data_slice[0]->markers.GetPointer(util::DEVICE), 0, num_elements); 
+
+        //util::MemsetKernel<<<128, 128, 0, stream>>>(data_slice[0]->markers.GetPointer(util::DEVICE), 0, num_elements);
         Mark_Queue_R0D <VertexId, SizeT>
             <<<grid_size, block_size, 0, stream>>> (
             num_elements,
@@ -590,7 +591,7 @@ public:
         //printf("num_lements = %d data_slice[%d]->out_length[1] = %d\n", num_elements, thread_num, data_slice[0]->out_length[1]);fflush(stdout);
         for (peer_ = 2; peer_ < num_gpus; peer_++)
             data_slice[0]->out_length[peer_] = data_slice[0]->out_length[1];
-        data_slice[0]->out_length[0] = frontier_attribute->queue_length; 
+        data_slice[0]->out_length[0] = frontier_attribute->queue_length;
     }
 
     /*static void Check_Queue_Size(
@@ -608,8 +609,8 @@ public:
         //util::CtaWorkProgressLifetime *work_progress,
         //ContextPtr                     context,
         //cudaStream_t                   stream
-        )    
-    {    
+        )
+    {
         bool over_sized = false;
         int  selector   = frontier_attribute->selector;
         int  iteration  = enactor_stats -> iteration;
@@ -620,18 +621,18 @@ public:
                 frontier_queue->keys[selector^1].GetSize(),
                 request_length);fflush(stdout);
 
-        if (enactor_stats->retval = 
-            Check_Size<true, SizeT, VertexId > ("queue3", request_length, &frontier_queue->keys  [selector^1], over_sized, thread_num, iteration, peer_, false)) return; 
-        if (enactor_stats->retval = 
-            Check_Size<true, SizeT, VertexId > ("queue3", graph_slice->nodes+2, &frontier_queue->keys  [selector  ], over_sized, thread_num, iteration, peer_, true )) return; 
+        if (enactor_stats->retval =
+            Check_Size<true, SizeT, VertexId > ("queue3", request_length, &frontier_queue->keys  [selector^1], over_sized, thread_num, iteration, peer_, false)) return;
+        if (enactor_stats->retval =
+            Check_Size<true, SizeT, VertexId > ("queue3", graph_slice->nodes+2, &frontier_queue->keys  [selector  ], over_sized, thread_num, iteration, peer_, true )) return;
         if (Problem::USE_DOUBLE_BUFFER)
-        {    
-            if (enactor_stats->retval = 
-                Check_Size<true, SizeT, Value> ("queue3", request_length, &frontier_queue->values[selector^1], over_sized, thread_num, iteration, peer_, false)) return; 
-            if (enactor_stats->retval = 
-                Check_Size<true, SizeT, Value> ("queue3", graph_slice->nodes+2, &frontier_queue->values[selector  ], over_sized, thread_num, iteration, peer_, true )) return; 
-        }    
-    } */   
+        {
+            if (enactor_stats->retval =
+                Check_Size<true, SizeT, Value> ("queue3", request_length, &frontier_queue->values[selector^1], over_sized, thread_num, iteration, peer_, false)) return;
+            if (enactor_stats->retval =
+                Check_Size<true, SizeT, Value> ("queue3", graph_slice->nodes+2, &frontier_queue->values[selector  ], over_sized, thread_num, iteration, peer_, true )) return;
+        }
+    } */
 
 }; // end R0DIteration
 
@@ -648,14 +649,20 @@ struct PRIteration : public IterationBase <
     false> //UPDATE_PREDECESSORS
 {
 public:
-    typedef typename Enactor::SizeT      SizeT     ;    
-    typedef typename Enactor::Value      Value     ;    
+    typedef typename Enactor::SizeT      SizeT     ;
+    typedef typename Enactor::Value      Value     ;
     typedef typename Enactor::VertexId   VertexId  ;
     typedef typename Enactor::Problem    Problem   ;
     typedef typename Problem::DataSlice  DataSlice ;
     typedef GraphSlice     <SizeT, VertexId, Value> GraphSlice;
     typedef PRFunctor      <VertexId, SizeT, Value, Problem> PrFunctor;
     typedef PRMarkerFunctor<VertexId, SizeT, Value, Problem> PrMarkerFunctor;
+
+
+    static void print_details(unsigned int queue_index, SizeT queue_length, bool flag, cudaStream_t stream){
+        printf("%i, %d\n",queue_index, queue_length);
+    }
+
 
     static void FullQueue_Core(
         int                            thread_num,
@@ -678,7 +685,7 @@ public:
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
 
-            //printf("Filter start.\n");fflush(stdout); 
+            //printf("Filter start.\n");fflush(stdout);
              // filter kernel
             gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, PrFunctor>
             <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
@@ -697,19 +704,20 @@ public:
                 enactor_stats->filter_kernel_stats);
 
             //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "filter_forward::Kernel failed", __FILE__, __LINE__))) break;
-            //cudaEventQuery(throttle_event); // give host memory mapped visibility to GPU updates     
+            //cudaEventQuery(throttle_event); // give host memory mapped visibility to GPU updates
 
-            //printf("Filter end.\n");fflush(stdout); 
+            //printf("Filter end.\n");fflush(stdout);
             //enactor_stats->iteration++;
             frontier_attribute->queue_index++;
-
+            print_details(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream);
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
+
             //num_elements = queue_length;
 
             //swap rank_curr and rank_next
             util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_curr.GetPointer(util::DEVICE),
-                data_slice->rank_next.GetPointer(util::DEVICE), 
+                data_slice->rank_next.GetPointer(util::DEVICE),
                 graph_slice->nodes);
             util::MemsetKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_next.GetPointer(util::DEVICE),
@@ -740,7 +748,7 @@ public:
         //if (enactor_stats->iteration == 0) util::cpu_mt::PrintGPUArray<SizeT, SizeT>("degrees", data_slice->degrees.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, peer_, stream);
         //util::cpu_mt::PrintGPUArray<SizeT, Value>("ranks", data_slice->rank_curr.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, peer_, stream);
 
-        //printf("Advance start.\n");fflush(stdout); 
+        //printf("Advance start.\n");fflush(stdout);
         // Edge Map
         frontier_attribute->queue_reset = true;
         gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrFunctor>(
@@ -768,15 +776,15 @@ public:
             gunrock::oprtr::advance::V2V,
             false,
             false);
-        
+
         if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index+1, frontier_attribute->queue_length, false, stream, true)) return;
         if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
         enactor_stats->total_queued[0] += frontier_attribute->queue_length;
         frontier_attribute->queue_length = data_slice->edge_map_queue_len;
-        //printf("Advance end.\n");fflush(stdout); 
+        //printf("Advance end.\n");fflush(stdout);
 
         //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "edge_map_forward::Kernel failed", __FILE__, __LINE__))) break;
-        //cudaEventQuery(throttle_event);                                 // give host memory mapped visibility to GPU updates 
+        //cudaEventQuery(throttle_event);                                 // give host memory mapped visibility to GPU updates
 
         /*if (Enactor::DEBUG) {
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
@@ -789,8 +797,8 @@ public:
                 enactor_stats->total_lifetimes, false, stream)) return;
         }*/
 
-        //if (done[0] == 0) break; 
-        
+        //if (done[0] == 0) break;
+
         //if (enactor_stats->retval = work_progress->SetQueueLength(frontier_attribute->queue_index, edge_map_queue_len)) return;
 
         //if (done[0] == 0 || frontier_attribute.queue_length == 0 || enactor_stats.iteration > max_iteration) break;
@@ -810,10 +818,10 @@ public:
         cudaStream_t                   stream,
         gunrock::oprtr::advance::TYPE  ADVANCE_TYPE,
         bool                           express = false)
-    {   
+    {
         //printf("Compute_OutputLength start.\n");fflush(stdout);
         cudaError_t retval = cudaSuccess;
-        if (AdvanceKernelPolicy::ADVANCE_MODE ==  gunrock::oprtr::advance::TWC_FORWARD) 
+        if (AdvanceKernelPolicy::ADVANCE_MODE ==  gunrock::oprtr::advance::TWC_FORWARD)
         {
             //return retval;
         } else {
@@ -832,11 +840,11 @@ public:
                 context,
                 stream,
                 ADVANCE_TYPE,
-                express);     
+                express);
         }
-        //printf("Compute_OutputLength end.\n");fflush(stdout); 
+        //printf("Compute_OutputLength end.\n");fflush(stdout);
         return retval;
-    }    
+    }
 
     template <int NUM_VERTEX_ASSOCIATES, int NUM_VALUE__ASSOCIATES>
     static void Expand_Incoming(
@@ -859,7 +867,7 @@ public:
             keys_in,
             array_size,
             array);
-        num_elements = 0; 
+        num_elements = 0;
     }
 
 #ifdef WITHMPI
@@ -868,59 +876,83 @@ public:
         EnactorStats                    *enactor_stats,
         FrontierAttribute<SizeT>        *frontier_attribute,
         util::Array1D<SizeT, DataSlice> *data_slice,
-        struct gunrock::app::GPU_Topology * mpi_topology)
+        struct gunrock::app::GPU_Topology * mpi_topology
+        )
     {
 		int rank = mpi_topology->local_rank;
 		int num_gpu_local = mpi_topology->num_gpus_per_server[rank];
 		int num_gpu_global = mpi_topology->total_num_gpus;
-		
 		bool ret_val=true;
         bool all_zero = true;
         for (int gpu = 0; gpu < num_gpu_local*num_gpu_global; gpu++)
         if (enactor_stats[gpu].retval != cudaSuccess)
-        {    
+        {
             printf("(CUDA error %d @ GPU %d: %s\n", enactor_stats[gpu].retval, gpu%num_gpu_global, cudaGetErrorString(enactor_stats[gpu].retval)); fflush(stdout);
-            ret_val = false;    
-        }  
+            ret_val = false;
+        }
 
-        for (int gpu =0; gpu < num_gpu_local; gpu++)
-        if (data_slice[mpi_topology->global_gpu_maping[rank][gpu]]->PR_queue_length > 0) 
+        for (int gpu =0; gpu < num_gpu_local; gpu++){
+printf("%s:%d ==== data_slices[%d]->PR_queue_length = %d;\n",__FILE__,__LINE__,gpu,data_slice[gpu]->PR_queue_length);
+        if (data_slice[gpu]->PR_queue_length > 0)
         {
             //printf("data_slice[%d].PR_queue_length = %d\n", gpu, data_slice[gpu]->PR_queue_length);
             all_zero = false;
         }
-		
+    }
+printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
         if (!all_zero){
         	for (int gpu = 0; gpu < num_gpu_local; gpu++)
         	if (enactor_stats[gpu * num_gpu_global].iteration < data_slice[0]->max_iter)
         	{
             	//printf("enactor_stats[%d].iteration = %lld\n", gpu, enactor_stats[gpu * num_gpus].iteration);
-            	ret_val = false;    
-        	} 
+            	ret_val = false;
+        	}
 		}
 
-		
+printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
+
 		//synchronize with all nodes
 		int world_rec_val=1;
-		int buffer;
 
 		for(int r=0; r<mpi_topology->num_servers; r++) //let every node do a Broadcast of its stop_condition
 		{
+            int buffer=ret_val? 1 : 0;
+            if(r==mpi_topology->local_rank)
+            {
+                printf("         \e[%im sending MPI Broadcast  as %d, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,rank,r, mpi_topology->num_servers,
+                world_rec_val, buffer); fflush(stdout);
+            }
+            else
+            {
+                printf("         \e[%im waiting MPI Broadcast from %d, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,r, rank, mpi_topology->num_servers,
+                world_rec_val, buffer); fflush(stdout);
+            }
+
 			MPI_Bcast(
 			    &buffer,
 			    1,
 			    MPI_INT,
 			    r,
 			    MPI_COMM_WORLD);
-			world_rec_val*=buffer;  //if one of the receiving elements is 0, set world_rec_val to 0
+
+            world_rec_val*=buffer;  //if one of the receiving elements is 0, set world_rec_val to 0
+
+printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,rank, mpi_topology->num_servers,
+                world_rec_val, buffer); fflush(stdout);
+
+
 		}
 
+        MPI_Barrier(MPI_COMM_WORLD);
+        printf(" <<<<<<<< \e[%im  Barrier passed, rank %d of %d\e[39m\n", mpi_topology->local_rank+32,rank, mpi_topology->num_servers); fflush(stdout);
 		if(!world_rec_val) ret_val=false;
+        printf("  \e[%im stop reached: returning %s\e[39m\n", mpi_topology->local_rank+32, world_rec_val? "true" : "false"); fflush(stdout);
         return ret_val;
-    }  
-
-
+    }
 #endif
+
+
+
     static bool Stop_Condition (
         EnactorStats                    *enactor_stats,
         FrontierAttribute<SizeT>        *frontier_attribute,
@@ -930,13 +962,13 @@ public:
         bool all_zero = true;
         for (int gpu = 0; gpu < num_gpus*num_gpus; gpu++)
         if (enactor_stats[gpu].retval != cudaSuccess)
-        {    
+        {
             //printf("(CUDA error %d @ GPU %d: %s\n", enactor_stats[gpu].retval, gpu%num_gpus, cudaGetErrorString(enactor_stats[gpu].retval)); fflush(stdout);
             return true;
-        }  
+        }
 
         for (int gpu =0; gpu < num_gpus; gpu++)
-        if (data_slice[gpu]->PR_queue_length > 0) 
+        if (data_slice[gpu]->PR_queue_length > 0)
         {
             //printf("data_slice[%d].PR_queue_length = %d\n", gpu, data_slice[gpu]->PR_queue_length);
             all_zero = false;
@@ -947,11 +979,11 @@ public:
         if (enactor_stats[gpu * num_gpus].iteration < data_slice[0]->max_iter)
         {
             //printf("enactor_stats[%d].iteration = %lld\n", gpu, enactor_stats[gpu * num_gpus].iteration);
-            return false;    
-        } 
+            return false;
+        }
 
         return true;
-    }    
+    }
 
     template <
         int NUM_VERTEX_ASSOCIATES,
@@ -986,7 +1018,7 @@ public:
             //util::cpu_mt::PrintGPUArray("keys", frontier_queue->keys[frontier_attribute->selector].GetPointer(util::DEVICE), frontier_attribute->queue_length, thread_num, enactor_stats->iteration, -1, stream);
             //util::cpu_mt::PrintGPUArray("row_offsets", graph_slice->row_offsets.GetPointer(util::DEVICE), graph_slice->nodes+1, thread_num, enactor_stats->iteration, -1, stream);
             //printf("Advance start.\n");fflush(stdout);
-            frontier_attribute->queue_reset = true; 
+            frontier_attribute->queue_reset = true;
             // Edge Map
             gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrMarkerFunctor>(
                 //d_done,
@@ -1015,7 +1047,7 @@ public:
                 true);
             //printf("Advance end.\n");fflush(stdout);
             //util::cpu_mt::PrintGPUArray("markers", data_slice[0]->markers.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
-            
+
             for (peer_ = 0; peer_<num_gpus; peer_++)
                 util::MemsetKernel<<<128, 128, 0, stream>>> ( data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), 0, graph_slice->nodes);
             Assign_Marker_PR<VertexId, SizeT>
@@ -1042,7 +1074,7 @@ public:
             if (graph_slice->nodes > 0) for (peer_ = 0; peer_<num_gpus; peer_++)
             {
                 cudaMemcpyAsync(
-                    &data_slice[0]->out_length[peer_], 
+                    &data_slice[0]->out_length[peer_],
                     data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE) + (graph_slice->nodes -1),
                     sizeof(SizeT), cudaMemcpyDeviceToHost, stream);
             } else {
@@ -1067,7 +1099,7 @@ public:
                 if (!over_sized) continue;
                 data_slice[0]->value__associate_outs[peer_][0] = data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE);
                 data_slice[0]->value__associate_outs[peer_].Move(util::HOST, util::DEVICE, -1, 0, stream);
-            } 
+            }
             data_slice[0]->keys_outs.Move(util::HOST, util::DEVICE, -1, 0, stream);
             data_slice[0]->out_length[0] = temp_length;
 
@@ -1079,7 +1111,7 @@ public:
                 data_slice[0]->markers      .GetPointer(util::DEVICE),
                 data_slice[0]->keys_markers .GetPointer(util::DEVICE),
                 data_slice[0]->keys_outs    .GetPointer(util::DEVICE));
-                
+
             //util::cpu_mt::PrintCPUArray("out_length", &data_slice[0]->out_length[0], num_gpus, thread_num, enactor_stats->iteration);
             //for (peer_ = 0; peer_<num_gpus; peer_++)
             //    util::cpu_mt::PrintGPUArray("keys_out[]", data_slice[0]->keys_out[peer_].GetPointer(util::DEVICE), data_slice[0]->out_length[peer_], thread_num, enactor_stats->iteration, peer_, stream);
@@ -1101,8 +1133,8 @@ public:
         //}
         if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
     }
- 
-}; 
+
+};
 
     /**
      * @brief Enacts a page rank computing on the specified graph.
@@ -1123,7 +1155,7 @@ public:
         typename FilterKernelPolicy,
         typename PrEnactor>
 		//left here
-			
+
     static CUT_THREADPROC PRThread(
         void * thread_data_)
     {
@@ -1156,10 +1188,10 @@ public:
 	    int  thread_num         =   thread_data -> thread_num;
 	    int  gpu_idx            =   problem     -> gpu_idx            [thread_num] ;
 		int  rank = 0;
-        printf("PRThread %i entered\n", thread_num);fflush(stdout);			
+        printf("PRThread %i entered\n", thread_num);fflush(stdout);
 #endif
-			
-	
+
+
         DataSlice    *data_slice         =   problem     -> data_slices        [thread_num].GetPointer(util::HOST);
         GraphSlice   *graph_slice        =   problem     -> graph_slices       [thread_num] ;
         FrontierAttribute<SizeT>
@@ -1168,12 +1200,12 @@ public:
 
         do {
 
-
             if (enactor_stats[0].retval = util::SetDevice(gpu_idx)) break;
             thread_data->stats = 1;
-            while (thread_data->stats !=2) sleep(0); //busy wait until EnactPR is waiting (line ~1385)
+CHECKPOINT_RT
+            while (thread_data->stats !=2) sleep(0); //busy wait until EnactPR is waiting (line ~1640)
             thread_data->stats = 3;
-
+CHECKPOINT_RT
             for (int peer_=0; peer_<num_gpus_global; peer_++)
             {
                 frontier_attribute[peer_].queue_length  = peer_==0?data_slice->local_nodes : 0;
@@ -1184,8 +1216,8 @@ public:
             }
             //gunrock::app::Iteration_Loop
             //    <0, 0, PrEnactor, PrFunctor, R0DIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
-            
-            data_slice->PR_queue_selector = frontier_attribute[0].selector; //TODO: mape MPI compatible
+CHECKPOINT_RT
+            data_slice->PR_queue_selector = frontier_attribute[0].selector; //TODO: make MPI compatible
             //for (int peer_=0; peer_<num_gpus; peer_++)
             //{
             //    frontier_attribute[peer_].queue_reset = true;
@@ -1193,8 +1225,11 @@ public:
             //}
             if (num_gpus_global > 1)
             {
+CHECKPOINT_RT
                 data_slice->value__associate_orgs[0] = data_slice->rank_next.GetPointer(util::DEVICE);
+CHECKPOINT_RT
                 data_slice->value__associate_orgs.Move(util::HOST, util::DEVICE);
+CHECKPOINT_RT
                 //util::cpu_mt::IncrementnWaitBarrier(cpu_barrier, thread_num);
                 //for (int i=0; i<4; i++)
                 //for (int gpu=0; gpu<num_gpus; gpu++)
@@ -1202,13 +1237,14 @@ public:
                 //    data_slice->events_set[i][gpu][stage] = false;
                 //util::cpu_mt::IncrementnWaitBarrier(cpu_barrier+1, thread_num);
             }
+            CHECKPOINT_RT
             data_slice -> edge_map_queue_len = frontier_attribute[0].queue_length;
             //util::cpu_mt::PrintGPUArray("degrees", data_slice->degrees.GetPointer(util::DEVICE), graph_slice->nodes, thread_num);
-
+CHECKPOINT_RT
             // Step through PR iterations
             gunrock::app::Iteration_Loop
                 <0, 1, PrEnactor, PrFunctor, PRIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
-            
+
 			//do final clean up; sent out last values while thread 0 sorts the nodes
             if (thread_num > 0 || rank!=0)
             {
@@ -1229,7 +1265,7 @@ public:
                     data_slice->keys_out[1].GetPointer(util::DEVICE),
                     data_slice->keys_out[0].GetPointer(util::DEVICE),
                     data_slice->local_nodes);
-                enactor_stats->iteration++;				
+                enactor_stats->iteration++;
 				if(rank==0)
 				{
                 	PushNeighbor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1> (
@@ -1252,13 +1288,33 @@ public:
 					{
 						problem  ->  mpi_ring_buffer -> all_done=1;
 					}
-				    MPI_Request **sent_requests = (MPI_Request **)malloc(sizeof(MPI_Request *)*(problem->mpi_topology->total_num_gpus));
-				    for(int i=0;i<problem->mpi_topology->total_num_gpus; i++)
-				    {
-				        sent_requests[i]=(MPI_Request *)malloc(sizeof(MPI_Request)*4);
-				    }
+				    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*(problem->mpi_topology->total_num_gpus));
+                    int ** req_size = (int**)malloc(sizeof(int*)*problem->mpi_topology->total_num_gpus);
+                    if(sent_requests==NULL || req_size==NULL){
+                        printf("No more memory\n");
+                        exit(0);
+                    }
+                    for(int g=0;g<problem->mpi_topology->total_num_gpus; g++)
+                    {
+                        sent_requests[g] = (MPI_Request **)malloc(sizeof(MPI_Request*)*problem->mpi_topology->total_num_gpus);
+                        req_size[g] = (int*)malloc(sizeof(int*) * problem->mpi_topology->total_num_gpus);
+                        if(sent_requests[g]==NULL){
+                            printf("No more memory\n");
+                            exit(0);
+                        }
+                        for(int p=0;p<problem->mpi_topology->total_num_gpus; p++){
+                                sent_requests[g][p]=(MPI_Request *)malloc(sizeof(MPI_Request)*4);
+                                if(sent_requests[g][p]==NULL){
+                                    printf("No more memory\n");
+                                    exit(0);
+                                }
+                        }
+                    }
+
+
                     MPI_PushNeighbor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
                        problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num],
+                       0,
                        0,
                        99,
                        0,
@@ -1269,52 +1325,61 @@ public:
                    	   problem->graph_slices[thread_num],
                    	   problem->graph_slices[0],
                        sent_requests,
+                       req_size,
                        problem->mpi_ring_buffer->mpi_vertex_type,
                        problem->mpi_ring_buffer->mpi_value__type
                        );
 
-					   
-					   
-					while(!MPI_Communication_Check(sent_requests, 0, num_gpus_global, 1+0+1))
+
+
+					while(!MPI_Communication_Check(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global))
 					{
 						sleep(0);
 					}
-					   
-		   		    for(int i=0;i<problem->mpi_topology->total_num_gpus; i++)
+
+		   		    for(int i=0; i<problem->mpi_topology->total_num_gpus; i++)
 		   		    {
+                        for(int g=0;i<problem->mpi_topology->total_num_gpus; g++){
+                            free(sent_requests[i][g]);
+                        }
+                        free(req_size[i]);
 		   		        free(sent_requests[i]);
 		   		    }
+                    free(req_size);
 		   			free(sent_requests);
 
 #endif
 				}
                 data_slice->final_event_set = true;
-                //util::cpu_mt::PrintGPUArray("keys_out", data_slice->keys_out[1].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]); 
-                //util::cpu_mt::PrintGPUArray("values_out", data_slice->value__associate_out[1][0].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]); 
+                //util::cpu_mt::PrintGPUArray("keys_out", data_slice->keys_out[1].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]);
+                //util::cpu_mt::PrintGPUArray("values_out", data_slice->value__associate_out[1][0].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]);
             } else { //thread_num == 0 && rank == 0
                 int counter = 0;
-                int *markers = new int [num_gpus];
+                int *markers = new int [num_gpus_global];
                 for (int peer=0; peer<num_gpus_global; peer++) markers[peer] = 0;
                 while (counter < num_gpus_global-1)
                 {
                     for (int peer=1; peer<num_gpus_global; peer++)
-					if (problem->mpi_topology->rank_of_gpu[peer]==0){ //the gpus on the local node
-                    	if (markers[peer] == 0 && problem->data_slices[peer]->final_event_set)
-                    	{
-                    		markers[peer] =1 ;
-                        	counter ++;
-                        	problem->data_slices[peer]->final_event_set = false;
-                        	int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
-                        	cudaStreamWaitEvent(data_slice->streams[peer], 
+                    {
+                    printf("peer = %d\n",peer); fflush(stdout);
+				    if (problem->mpi_topology->rank_of_gpu[peer]==0)
+                    { //the gpus on the local node
+                        if (markers[peer] == 0 && problem->data_slices[peer]->final_event_set)
+                        {
+                    	    markers[peer] =1 ;
+                    	    counter ++;
+                    	    problem->data_slices[peer]->final_event_set = false;
+                    	    int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
+                    	    cudaStreamWaitEvent(data_slice->streams[peer],
                             	problem->data_slices[peer]->events[peer_iteration%4][1][0], 0);
-                        	Expand_Incoming_Final<VertexId, SizeT, Value>
+                    	    Expand_Incoming_Final<VertexId, SizeT, Value>
                             	<<<128, 128, 0, data_slice->streams[peer]>>> (
-                            		problem->data_slices[peer]->local_nodes,
-                            		data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
-                            		data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
-                            		data_slice->rank_curr.GetPointer(util::DEVICE));
-                    	}
-					}
+                        	    	problem->data_slices[peer]->local_nodes,
+                        	    	data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
+                        	    	data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
+                        	    	data_slice->rank_curr.GetPointer(util::DEVICE));
+                        }
+                    }
 					else
 					{
                     	if (markers[peer] == 0)
@@ -1322,13 +1387,13 @@ public:
                     		markers[peer] = 1 ;
                         	counter ++;
                         	int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
-                        	
+
 							//copy from ring buffer to
 							printf("waiting for final data from peer %d, %s:%d\n", peer,__FILE__,__LINE__);
 							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
-							
+
                             int buffer_pos = problem->mpi_ring_buffer->back_pos[peer];
-                        
+
 							MPI_buffer2receiving_device<PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
 								problem->mpi_ring_buffer,
 								peer,
@@ -1336,19 +1401,20 @@ public:
 								enactor_stats,
 								problem->data_slices[0].GetPointer(util::HOST),
 								data_slice->streams[peer]);
-								
+
 			                if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(data_slice->streams[peer]),
 			                        "cudaStreamSynchronize failed", __FILE__, __LINE__)) break;
-							
+
                         	Expand_Incoming_Final<VertexId, SizeT, Value>
                             	<<<128, 128, 0, data_slice->streams[peer]>>> (
                             		problem->data_slices[peer]->local_nodes,
                             		data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
                             		data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
                             		data_slice->rank_curr.GetPointer(util::DEVICE));
-								
+
                     	}
 					}
+                    }
                 }
                 for (int peer=1; peer<num_gpus_local; peer++)
                 {
@@ -1365,8 +1431,8 @@ public:
                     data_slice->node_ids.GetPointer(util::DEVICE));
             }
 
-        } while(0); 
-
+        } while(0);
+CHECKPOINT_RT
         printf("PR_Thread finished\n");fflush(stdout);
         thread_data->stats = 4;
         CUT_THREADEND;
@@ -1390,7 +1456,7 @@ class PREnactor : public EnactorBase<typename _Problem::SizeT, _DEBUG, _SIZE_CHE
     ThreadSlice *thread_slices;
     CUTThread   *thread_Ids   ;
     util::cpu_mt::CPUBarrier *cpu_barrier;
-    
+
     // Methods
 public:
     typedef _Problem                   Problem;
@@ -1401,55 +1467,55 @@ public:
     static const bool DEBUG      = _DEBUG;
     static const bool SIZE_CHECK = _SIZE_CHECK;
 
-   /**  
+   /**
      * \addtogroup PublicInterface
      * @{
      */
 
-   /**  
+   /**
     * @brief PREnactor constructor
     */
    PREnactor(int num_gpus = 1, int* gpu_idx = NULL) :
        EnactorBase<SizeT, _DEBUG, _SIZE_CHECK>(VERTEX_FRONTIERS, num_gpus, gpu_idx)
-   {    
+   {
        thread_slices = NULL;
        thread_Ids    = NULL;
        problem       = NULL;
        cpu_barrier   = NULL;
-   }    
+   }
 
 #ifdef WITHMPI
-  /**  
+  /**
    * @brief PREnactor constructor for MPI multi-node,multi-gpu
    */
   PREnactor(int num_gpus_local = 1, int num_gpus_global = 1, int* gpu_idx_local = NULL) :
       EnactorBase<SizeT, _DEBUG, _SIZE_CHECK>(VERTEX_FRONTIERS, num_gpus_global, gpu_idx_local, num_gpus_local)
-  {    
+  {
       thread_slices = NULL;
       thread_Ids    = NULL;
       problem       = NULL;
       cpu_barrier   = NULL;
-  }    
+  }
 #endif
 
 
 
-    /**  
+    /**
      *  @brief PREnactor destructor
      */
     virtual ~PREnactor()
-    {    
+    {
         cutWaitForThreads(thread_Ids, this->num_gpus);
         delete[] thread_Ids   ; thread_Ids    = NULL;
         delete[] thread_slices; thread_slices = NULL;
         problem = NULL;
         if (cpu_barrier!=NULL)
-        {    
+        {
             util::cpu_mt::DestoryBarrier(&cpu_barrier[0]);
             util::cpu_mt::DestoryBarrier(&cpu_barrier[1]);
             delete[] cpu_barrier;cpu_barrier=NULL;
-        }    
-    }    
+        }
+    }
 
     /**
      * \addtogroup PublicInterface
@@ -1509,15 +1575,15 @@ public:
         //int         max_iteration,
         int         max_grid_size = 512)
     {
-		
+
 		int num_gpus_local=this->num_gpus;
 #ifdef WITHMPI
-		if(this->num_gpus==-1) 
+		if(this->num_gpus==-1)
 		{
 			num_gpus_local=this->num_gpus_local;
 		}
-#endif		
-		
+#endif
+
         cudaError_t retval = cudaSuccess;
         cpu_barrier = new util::cpu_mt::CPUBarrier[2];
         cpu_barrier[0]=util::cpu_mt::CreateBarrier(num_gpus_local);
@@ -1535,9 +1601,13 @@ public:
         }
 
         this->problem = problem;
+#ifdef WITHMPI
+        thread_slices = new ThreadSlice [num_gpus_local+1];
+        thread_Ids    = new CUTThread   [num_gpus_local+1];
+#else
         thread_slices = new ThreadSlice [num_gpus_local];
         thread_Ids    = new CUTThread   [num_gpus_local];
-
+#endif
         for (int gpu=0; gpu<num_gpus_local; gpu++)
         {
             thread_slices[gpu].cpu_barrier  = cpu_barrier;
@@ -1546,7 +1616,9 @@ public:
             thread_slices[gpu].enactor      = (void*)this;
             thread_slices[gpu].context      =&(context[gpu*num_gpus_local]);
             thread_slices[gpu].stats        = -1;
-			
+            EnactorStats * e = &(this->enactor_stats[0]);
+
+
             thread_slices[gpu].thread_Id = cutStartThread(
                 (CUT_THREADROUTINE)&(PRThread<
                     AdvanceKernelPolity, FilterKernelPolicy,
@@ -1554,22 +1626,27 @@ public:
                     (void*)&(thread_slices[gpu]));
             thread_Ids[gpu] = thread_slices[gpu].thread_Id;
         }
-
+CHECKPOINT
 #ifdef WITHMPI
+                thread_slices[num_gpus_local].cpu_barrier  = cpu_barrier;
+                thread_slices[num_gpus_local].thread_num   = num_gpus_local;                            //assign thread id to gpu id
+                thread_slices[num_gpus_local].problem      = (void*)problem;
+                thread_slices[num_gpus_local].enactor      = (void*)this;
+                thread_slices[num_gpus_local].stats        = -1;
 				CUTThread MPI_thread_id = cutStartThread(
 					(CUT_THREADROUTINE)&(
 						MPI_Comm_Loop<
 							0,
 							1,
 							PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>,
-							PRFunctor<VertexId, SizeT, Value, Problem>, 
+							PRFunctor<VertexId, SizeT, Value, Problem>,
 							PRIteration<
-								AdvanceKernelPolity, 
+								AdvanceKernelPolity,
 								FilterKernelPolicy,
 								PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>
 							>
 						>
-					), (void*)&(thread_slices[0]));
+					), (void*)&(thread_slices[num_gpus_local]));
 #endif
 
         return retval;
@@ -1590,9 +1667,16 @@ public:
         do {
             for (int gpu=0; gpu< this->num_gpus_local; gpu++)
             {
+                CHECKPOINT
                 while (thread_slices[gpu].stats!=1) sleep(0);
                 thread_slices[gpu].stats=2;
             }
+#ifdef WITHMPI
+printf(" 0: retval %d, iteration \n",this->enactor_stats[0].retval,this->enactor_stats[0].iteration);
+printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enactor_stats[1].iteration);
+            while (thread_slices[this->num_gpus_local].stats!=1) sleep(0);
+            thread_slices[this->num_gpus_local].stats=2;
+#endif
             for (int gpu=0; gpu< this->num_gpus_local; gpu++)
             {
                 while (thread_slices[gpu].stats!=4) sleep(0);
@@ -1673,15 +1757,17 @@ public:
         int   traversal_mode)
     {
 		int num_gpus_local = this->num_gpus;
+
 #ifdef WITHMPI
-		if( this->num_gpus == -1 ) 
+		if( this->num_gpus == -1 )
 		{
 			num_gpus_local = this->num_gpus_local;
 		}
 #endif
-		
+
+
         int min_sm_version = -1;
-        for (int gpu=0; num_gpus_local; gpu++)
+        for (int gpu=0; gpu<num_gpus_local; gpu++)
             if (min_sm_version == -1 || this->cuda_props[gpu].device_sm_version < min_sm_version)
                 min_sm_version = this->cuda_props[gpu].device_sm_version;
 
@@ -1701,9 +1787,9 @@ public:
         printf("Not yet tuned for this architecture\n");
         return cudaErrorInvalidDeviceFunction;
     }
-	
-	
-	
+
+
+
     //PREnactor
     cudaError_t Init(
             ContextPtr *context,
@@ -1715,9 +1801,11 @@ public:
 
         int min_sm_version = -1;
         for (int gpu=0; gpu<this->num_gpus_local; gpu++)
+        {
+            CHECKPOINT
             if (min_sm_version == -1 || this->cuda_props[gpu].device_sm_version < min_sm_version)
                 min_sm_version = this->cuda_props[gpu].device_sm_version;
-
+        }
         if (min_sm_version >= 300) {
            if (traversal_mode == 1)
                 return InitPR<FWDAdvanceKernelPolicy, FilterKernelPolicy>(
@@ -1728,7 +1816,7 @@ public:
 
         //to reduce compile time, get rid of other architecture for now
         //TODO: add all the kernel policy settings for all architectures
-        printf("Not yet tuned for this architecture\n");
+        printf("Not yet tuned for this architecture %d\n",min_sm_version);
         return cudaErrorInvalidDeviceFunction;
 
     }

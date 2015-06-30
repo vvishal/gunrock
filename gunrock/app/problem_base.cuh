@@ -38,6 +38,13 @@
 #include <mpi.h>
 #endif
 
+#define CHECKPOINT printf("checkpoint %s:%d\n",__FILE__,__LINE__);fflush(stdout);
+#define CHECKPOINT_RT ;//printf("rank/thread %d/%d checkpoint %s:%d\n", problem -> mpi_topology->local_rank,thread_num,__FILE__,__LINE__);fflush(stdout);
+#define CHECKPOINT_RTT ;//printf("\e[%imrank/thread %d/%d checkpoint %s:%d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__);fflush(stdout);
+#define CHECKPOINT_RTL ;//printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
+#define CHECKPOINT_RTL2 printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 34+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
+
+
 
 namespace gunrock {
 namespace app {
@@ -68,7 +75,7 @@ namespace app {
        int             index   ; // Slice index
        VertexId        nodes   ; // Number of nodes in slice
        SizeT           edges   ; // Number of edges in slice
-    
+
        Csr<VertexId, Value, SizeT   > *graph             ; // Pointer to CSR format subgraph
        util::Array1D<SizeT, SizeT   > row_offsets        ; // CSR format row offset
        util::Array1D<SizeT, VertexId> column_indices     ; // CSR format column indices
@@ -85,7 +92,7 @@ namespace app {
        util::Array1D<SizeT, SizeT   > backward_offset    ; // Backward offsets for partition and convertion tables
        util::Array1D<SizeT, int     > backward_partition ; // Remote peers having the same vertices
        util::Array1D<SizeT, VertexId> backward_convertion; // IDs of vertices in remote peers
-    
+
        /**
         * @brief GraphSlice Constructor
         *
@@ -114,7 +121,7 @@ namespace app {
            backward_partition .SetName("backward_partition" );
            backward_convertion.SetName("backward_convertion");
        } // end GraphSlice(int index)
-    
+
        /**
         * @brief GraphSlice Destructor to free all device memories.
         */
@@ -122,7 +129,7 @@ namespace app {
        {
            // Set device (use slice index)
            util::SetDevice(index);
-        
+
            // Release allocated host / device memory
            row_offsets        .Release();
            column_indices     .Release();
@@ -140,7 +147,7 @@ namespace app {
            backward_partition .Release();
            backward_convertion.Release();
        } // end ~GraphSlice()
-    
+
        /**
         * @brief Initalize graph slice
         *
@@ -176,7 +183,6 @@ namespace app {
                         VertexId*                  backward_convertion= NULL)
        {
            cudaError_t retval     = cudaSuccess;
-        
            // Set local variables / array pointers
            this->num_gpus         = num_gpus;
            this->graph            = graph;
@@ -195,20 +201,19 @@ namespace app {
                this->column_offsets .SetPointer(inverstgraph->row_offsets, nodes+1);
                this->row_indices    .SetPointer(inverstgraph->column_indices   , edges  );
            }
-        
            do {
                // Set device using slice index
                if (retval = util::GRError(cudaSetDevice(index),
                                           "GpuSlice cudaSetDevice failed", __FILE__, __LINE__)) break;
-            
+
                // Allocate and initialize row_offsets
                if (retval = this->row_offsets.Allocate(nodes+1      ,util::DEVICE)) break;
                if (retval = this->row_offsets.Move    (util::HOST   ,util::DEVICE)) break;
-            
+
                // Allocate and initialize column_indices
                if (retval = this->column_indices.Allocate(edges     ,util::DEVICE)) break;
                if (retval = this->column_indices.Move    (util::HOST,util::DEVICE)) break;
-            
+
                // Allocate out degrees for each node
                if (retval = this->out_degrees.Allocate(nodes        ,util::DEVICE)) break;
                // count number of out-going degrees for each node
@@ -217,18 +222,17 @@ namespace app {
                                                          this->row_offsets.GetPointer(util::DEVICE),
                                                          this->row_offsets.GetPointer(util::DEVICE) + 1,
                                                          -1, nodes);
-            
-            
+
                if (inverstgraph != NULL)
                {
                    // Allocate and initialize column_offsets
                    if (retval = this->column_offsets.Allocate(nodes+1      ,util::DEVICE)) break;
                    if (retval = this->column_offsets.Move    (util::HOST   ,util::DEVICE)) break;
-                
+
                    // Allocate and initialize row_indices
                    if (retval = this->row_indices.Allocate(edges     ,util::DEVICE)) break;
                    if (retval = this->row_indices.Move    (util::HOST,util::DEVICE)) break;
-                
+
                    // Allocate in degrees for each node
                    if (retval = this->in_degrees .Allocate(nodes,  util::DEVICE)) break;
                    // count number of in-going degrees for each node
@@ -238,7 +242,6 @@ namespace app {
                                                              this->column_offsets.GetPointer(util::DEVICE) + 1,
                                                              -1, nodes);
                }
-            
                // For multi-GPU cases
                if (num_gpus > 1)
                {
@@ -246,17 +249,17 @@ namespace app {
                    if (retval = this->partition_table.Allocate (nodes     ,util::DEVICE)) break;
                    if (partition_table  != NULL)
                        if (retval = this->partition_table.Move (util::HOST,util::DEVICE)) break;
-                
+
                    // Allocate and initalize convertion_table
                    if (retval = this->convertion_table.Allocate(nodes     ,util::DEVICE)) break;
                    if (convertion_table != NULL)
                        if (retval = this->convertion_table.Move(util::HOST,util::DEVICE)) break;
-                
+
                    // Allocate and initalize original_vertex
                    if (retval = this->original_vertex .Allocate(nodes     ,util::DEVICE)) break;
                    if (original_vertex  != NULL)
                        if (retval = this->original_vertex .Move(util::HOST,util::DEVICE)) break;
-                
+
                    // If need backward information progation
                    if (backward_offsets!=NULL)
                    {
@@ -264,12 +267,12 @@ namespace app {
                        this->backward_offset    .SetPointer(backward_offsets     , nodes+1);
                        if (retval = this->backward_offset    .Allocate(nodes+1, util::DEVICE)) break;
                        if (retval = this->backward_offset    .Move(util::HOST, util::DEVICE)) break;
-                    
+
                        // Allocate and initalize backward_partition
                        this->backward_partition .SetPointer(backward_partition   , backward_offsets[nodes]);
                        if (retval = this->backward_partition .Allocate(backward_offsets[nodes], util::DEVICE)) break;
                        if (retval = this->backward_partition .Move(util::HOST, util::DEVICE)) break;
-                    
+
                        // Allocate and initalize backward_convertion
                        this->backward_convertion.SetPointer(backward_convertion  , backward_offsets[nodes]);
                        if (retval = this->backward_convertion.Allocate(backward_offsets[nodes], util::DEVICE)) break;
@@ -277,10 +280,10 @@ namespace app {
                    }
                } // end if num_gpu>1
            } while (0);
-        
+
            return retval;
        } // end of Init(...)
-    
+
        /**
         * @brief overloaded = operator
         *
@@ -309,7 +312,7 @@ namespace app {
            backward_convertion = other.backward_convertion;
            return *this;
        } // end operator=()
-    
+
    }; // end GraphSlice
 
 
@@ -324,7 +327,7 @@ namespace app {
        int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
        int total_num_gpus                 ;   // the total number of GPUs
        int local_rank                     ;   // the local MPI rank
-    
+
    };
 
    template <
@@ -346,7 +349,8 @@ namespace app {
        int all_done                         ;
 	   int num_vertex_associate;
 	   int num_value__associate;
-    
+       volatile int * checked;
+
        MPI_Ring_Buffer(int num_gpu_global, int size, SizeT    num_vertex_associate, SizeT    num_value__associate) //ring buffer initialization
        {
 		   this->num_vertex_associate = num_vertex_associate;
@@ -360,7 +364,7 @@ namespace app {
            {
                fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
            }
-         
+
 		   //memory for the buffer gets allocated the first time data is received
            for(int g=0; g<num_gpu_global; g++)
            {
@@ -369,21 +373,21 @@ namespace app {
                {
                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
                }
-            
+
                buffer_vertex[g]=(VertexId **)malloc(sizeof(VertexId*)*length);
                if(buffer_vertex[g]==NULL)
                {
                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
                }
-            
+
                buffer_value[g]=(Value **)malloc(sizeof(Value*)*length);
                if(buffer_value[g]==NULL)
                {
                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
                }
-            
+
            }
-        
+
            front_pos = (volatile int*)malloc(sizeof(int)*num_gpu_global);
            back_pos  = (volatile int*)malloc(sizeof(int)*num_gpu_global);
            allocated = (volatile int**)malloc(sizeof(int*)*num_gpu_global);
@@ -392,8 +396,8 @@ namespace app {
            {
                fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
            }
-        
-           
+
+
            for(int i=0; i<num_gpu_global; i++)
            {
                allocated[i]  = (int*)malloc(sizeof(int)*length);
@@ -407,13 +411,20 @@ namespace app {
                back_pos[i]   = 0;
            }
        }
-    
-    
+
+       void initBarrier(int num_gpus_local){
+           checked = (volatile int *)malloc(sizeof(int)*num_gpus_local);
+           for(int g =0; g<num_gpus_local; g++)
+           {
+               checked[g]=0;
+           }
+       }
+
        int has_data(int index){
            if (front_pos[index]!=back_pos[index]) return 1;
            return 0;
        }
-    
+
        void pop_back(int i){
            back_pos[i]  = (back_pos[i]+1)%length;
            front_pos[i] = (front_pos[i]+1)%length;
@@ -475,11 +486,11 @@ namespace app {
        util::Array1D<SizeT, char        >  *expand_incoming_array   ; // compressed data structure for expand_incoming kernel
        util::Array1D<SizeT, VertexId    >   preds                   ; // predecessors of vertices
        util::Array1D<SizeT, VertexId    >   temp_preds              ; // tempory storages for predecessors
-    
+
        //Frontier queues. Used to track working frontier.
        util::DoubleBuffer<SizeT, VertexId, Value>  *frontier_queues ; // frontier queues
        util::Array1D<SizeT, SizeT       >  *scanned_edges           ; // length / offsets for offsets of the frontier queues
-    
+
        /**
         * @brief DataSliceBase default constructor
         */
@@ -491,7 +502,7 @@ namespace app {
            num_value__associate     = 0;
            gpu_idx                  = 0;
            gpu_mallocing            = 0;
-        
+
            // Assign NULs to pointers
            keys_out                 = NULL;
            keys_marker              = NULL;
@@ -512,7 +523,7 @@ namespace app {
            frontier_queues          = NULL;
            scanned_edges            = NULL;
            expand_incoming_array    = NULL;
-        
+
            // Assign names to arrays
            keys_outs              .SetName("keys_outs"              );
            vertex_associate_outss .SetName("vertex_associate_outss" );
@@ -530,13 +541,14 @@ namespace app {
            streams                .SetName("streams"                );
            preds                  .SetName("preds"                  );
            temp_preds             .SetName("temp_preds"             );
+
            for (int i=0;i<4;i++)
            {
                events[i].SetName("events[]");
                events_set[i].SetName("events_set[]");
            }
        } // end DataSliceBase()
-    
+
        /**
         * @brief DataSliceBase default destructor to release host / device memory
         */
@@ -544,7 +556,7 @@ namespace app {
        {
            // Set device by index
            if (util::SetDevice(gpu_idx)) return;
-        
+
            // Release VertexId type incoming associate values and related pointers
            if (vertex_associate_in[0] != NULL)
            {
@@ -571,7 +583,7 @@ namespace app {
                vertex_associate_ins[0] = NULL;
                vertex_associate_ins[1] = NULL;
            }
-        
+
            // Release Value type incoming associate values and related pointers
            if (value__associate_in[0] != NULL)
            {
@@ -598,7 +610,7 @@ namespace app {
                value__associate_ins[0] = NULL;
                value__associate_ins[1] = NULL;
            }
-        
+
            // Release incoming keys and related pointers
            if (keys_in[0] != NULL)
            {
@@ -612,7 +624,7 @@ namespace app {
                keys_in[0] = NULL;
                keys_in[1] = NULL;
            }
-        
+
            // Release outgoing keys and markers
            if (keys_marker !=NULL)
            {
@@ -625,7 +637,7 @@ namespace app {
                delete[] keys_marker; keys_marker = NULL;
                keys_markers.Release();
            }
-        
+
            // Release VertexId type outgoing associate values and pointers
            if (vertex_associate_out != NULL)
            {
@@ -643,7 +655,7 @@ namespace app {
                vertex_associate_outs=NULL;
                vertex_associate_outss.Release();
            }
-        
+
            // Release Value type outgoing associate values and pointers
            if (value__associate_out != NULL)
            {
@@ -661,7 +673,7 @@ namespace app {
                value__associate_outs=NULL;
                value__associate_outss.Release();
            }
-        
+
            // Release events and markers
            for (int i=0;i<4;i++)
            {
@@ -675,7 +687,7 @@ namespace app {
                events    [i].Release();
                events_set[i].Release();
            }
-        
+
            // Release expand_incoming_arrays
            if (expand_incoming_array!=NULL)
            {
@@ -684,7 +696,7 @@ namespace app {
                delete[] expand_incoming_array;
                expand_incoming_array = NULL;
            }
-        
+
            // Release frontiers
            if (frontier_queues!=NULL)
            {
@@ -697,7 +709,7 @@ namespace app {
                }
                delete[] frontier_queues; frontier_queues=NULL;
            }
-        
+
            // Release scanned_edges
            if (scanned_edges != NULL)
            {
@@ -706,7 +718,7 @@ namespace app {
                delete[] scanned_edges;
                scanned_edges           = NULL;
            }
-        
+
            //Release all other arrays
            keys_outs     .Release();
            in_length  [0].Release();
@@ -722,7 +734,7 @@ namespace app {
            preds         .Release();
            temp_preds    .Release();
        } // end ~DataSliceBase()
-    
+
        /**
         * @brief Initiate DataSliceBase
         *
@@ -754,10 +766,10 @@ namespace app {
            this->nodes                = graph->nodes;
            this->num_vertex_associate = num_vertex_associate;
            this->num_value__associate = num_value__associate;
-        
+
            // Set device by index
            if (retval = util::SetDevice(gpu_idx))  return retval;
-        
+
            // Allocate frontiers and scanned_edges
            this->frontier_queues      = new util::DoubleBuffer<SizeT, VertexId, Value>[num_gpus+1];
            this->scanned_edges        = new util::Array1D<SizeT, SizeT>[num_gpus+1];
@@ -770,7 +782,7 @@ namespace app {
            if (retval = out_length  .Allocate(num_gpus,util::HOST | util::DEVICE)) return retval;
            if (retval = vertex_associate_orgs.Allocate(num_vertex_associate, util::HOST | util::DEVICE)) return retval;
            if (retval = value__associate_orgs.Allocate(num_value__associate, util::HOST | util::DEVICE)) return retval;
-        
+
            // Allocate / create event related variables
            wait_marker .Allocate(num_gpus*2);
            stages      .Allocate(num_gpus*2);
@@ -800,7 +812,7 @@ namespace app {
                for (int i=0;i<2;i++)
                    in_length[i][gpu]=0;
            }
-        
+
            if (num_gpus==1) return retval;
            // Create incoming buffer on device
            keys_in             [0] = new util::Array1D<SizeT,VertexId > [num_gpus];
@@ -829,23 +841,23 @@ namespace app {
                        value__associate_in[t][gpu][i].SetName("value__associate_ins[]");
                        if (gpu!=0) if (retval = value__associate_in[t][gpu][i].Allocate(num_in_node,util::DEVICE)) return retval;
                    }
-                
+
                    vertex_associate_ins[t][gpu].SetName("vertex_associate_ins");
                    if (retval = vertex_associate_ins[t][gpu].Allocate(num_vertex_associate, util::DEVICE | util::HOST)) return retval;
                    for (int i=0;i<num_vertex_associate;i++)
                        vertex_associate_ins[t][gpu][i] = vertex_associate_in[t][gpu][i].GetPointer(util::DEVICE);
                    if (retval = vertex_associate_ins[t][gpu].Move(util::HOST, util::DEVICE)) return retval;
-                
+
                    value__associate_ins[t][gpu].SetName("value__associate_ins");
                    if (retval = value__associate_ins[t][gpu].Allocate(num_value__associate, util::DEVICE | util::HOST)) return retval;
                    for (int i=0;i<num_value__associate;i++)
                        value__associate_ins[t][gpu][i] = value__associate_in[t][gpu][i].GetPointer(util::DEVICE);
                    if (retval = value__associate_ins[t][gpu].Move(util::HOST, util::DEVICE)) return retval;
-                
+
                    keys_in[t][gpu].SetName("keys_in");
                    if (gpu!=0) if (retval = keys_in[t][gpu].Allocate(num_in_node,util::DEVICE)) return retval;
                }
-        
+
            // Allocate outgoing buffer on device
            vertex_associate_out  = new util::Array1D<SizeT,VertexId >*[num_gpus];
            vertex_associate_outs = new util::Array1D<SizeT,VertexId*> [num_gpus];
@@ -869,7 +881,7 @@ namespace app {
                    if (retval = keys_out[gpu].Allocate(num_out_node, util::DEVICE)) return retval;
                    keys_outs[gpu]=keys_out[gpu].GetPointer(util::DEVICE);
                }
-            
+
                vertex_associate_out  [gpu] = new util::Array1D<SizeT,VertexId>[num_vertex_associate];
                vertex_associate_outs [gpu].SetName("vertex_associate_outs[]");
                if (retval = vertex_associate_outs[gpu].Allocate(num_vertex_associate, util::HOST | util::DEVICE)) return retval;
@@ -882,7 +894,7 @@ namespace app {
                    vertex_associate_outs[gpu][i]=vertex_associate_out[gpu][i].GetPointer(util::DEVICE);
                }
                if (retval = vertex_associate_outs[gpu].Move(util::HOST, util::DEVICE)) return retval;
-            
+
                value__associate_out [gpu] = new util::Array1D<SizeT,Value>[num_value__associate];
                value__associate_outs[gpu].SetName("value__associate_outs[]");
                if (retval = value__associate_outs[gpu].Allocate(num_value__associate, util::HOST | util::DEVICE)) return retval;
@@ -899,7 +911,7 @@ namespace app {
            if (retval = keys_markers          .Move(util::HOST, util::DEVICE)) return retval;
            if (retval = vertex_associate_outss.Move(util::HOST, util::DEVICE)) return retval;
            if (retval = value__associate_outss.Move(util::HOST, util::DEVICE)) return retval;
-        
+
            // Allocate make_out_array and expand_incoming array
            if (retval = make_out_array.Allocate(
                                                 sizeof(SizeT*   ) * num_gpus +
@@ -919,10 +931,10 @@ namespace app {
                                                               sizeof(VertexId*) * num_vertex_associate * 2,
                                                               util::HOST | util::DEVICE)) return retval;
            }
-        
+
            return retval;
        } // end Init(..)
-    
+
        /**
         * @brief Performs reset work needed for DataSliceBase. Must be called prior to each search
         *
@@ -946,15 +958,15 @@ namespace app {
            for (int peer=0; peer<num_gpus; peer++)
                out_length[peer] = 1;
            if (queue_sizing1<0) queue_sizing1 = queue_sizing;
-        
+
            //
            // Allocate frontier queues if necessary
            //
-        
+
            // Determine frontier queue sizes
            SizeT new_frontier_elements[2] = {0,0};
            if (num_gpus>1) util::cpu_mt::PrintCPUArray<int, SizeT>("in_counter", graph_slice->in_counter.GetPointer(util::HOST), num_gpus+1, gpu_idx);
-        
+
            for (int peer=0;peer<(num_gpus>1?num_gpus+1:1);peer++)
                for (int i=0; i< 2; i++)
                {
@@ -965,30 +977,30 @@ namespace app {
                            new_frontier_elements[0] = double(num_gpus>1? graph_slice->in_counter[peer]:graph_slice->nodes) * queue_sizing_ +2;
                            new_frontier_elements[1] = new_frontier_elements[0];
                            break;
-                        
+
                        case EDGE_FRONTIERS :
                            // O(m) ping-pong global edge frontiers
                            new_frontier_elements[0] = double(graph_slice->edges) * queue_sizing_ +2;
                            new_frontier_elements[1] = new_frontier_elements[0];
                            break;
-                        
+
                        case MIXED_FRONTIERS :
                            // O(n) global vertex frontier, O(m) global edge frontier
                            new_frontier_elements[0] = double(num_gpus>1?graph_slice->in_counter[peer]:graph_slice->nodes) * queue_sizing_ +2;
                            new_frontier_elements[1] = double(graph_slice->edges) * queue_sizing_ +2;
                            break;
                    }
-                
+
                    // if froniter_queue is not big enough
                    if (frontier_queues[peer].keys[i].GetSize() < new_frontier_elements[i]) {
-                    
+
                        // If previously allocated
                        if (frontier_queues[peer].keys[i].GetPointer(util::DEVICE) != NULL && frontier_queues[peer].keys[i].GetSize()!=0) {
                            if (retval = frontier_queues[peer].keys[i].EnsureSize(new_frontier_elements[i])) return retval;
                        } else {
                            if (retval = frontier_queues[peer].keys[i].Allocate(new_frontier_elements[i], util::DEVICE)) return retval;
                        }
-                    
+
                        // If use double buffer
                        if (_USE_DOUBLE_BUFFER) {
                            if (frontier_queues[peer].values[i].GetPointer(util::DEVICE) != NULL &&frontier_queues[peer].values[i].GetSize()!=0) {
@@ -997,11 +1009,11 @@ namespace app {
                                if (retval = frontier_queues[peer].values[i].Allocate(new_frontier_elements[i], util::DEVICE)) return retval;
                            }
                        }
-                    
+
                    } //end if
-                
+
                    if (i==1) continue;
-                
+
                    // Allocate scanned_edges
                    SizeT max_elements = new_frontier_elements[0];
                    if (new_frontier_elements[1] > max_elements) max_elements=new_frontier_elements[1];
@@ -1014,10 +1026,10 @@ namespace app {
                        }
                    }
                }
-        
+
            return retval;
        } // end Reset(...)
-    
+
    }; // end DataSliceBase
 
    /**
@@ -1052,7 +1064,7 @@ namespace app {
        struct gunrock::app::GPU_Topology * mpi_topology ; //the information about the MPI/GPU topology
        int * gpu_idx_local             ;
    #endif
-    
+
        /**
         * @brief TestParameter_Base constructor
         */
@@ -1081,7 +1093,7 @@ namespace app {
            iterations         = 1;
            traversal_mode     = -1;
        } // end TestParameter_Base()
-    
+
        /**
         * @brief TestParameter_Base destructor
         */
@@ -1093,7 +1105,7 @@ namespace app {
            gpu_idx = NULL;
            streams = NULL;
        } // end ~TestParameter_Base()
-    
+
        /**
         * @brief Initialization process for TestParameter_Base
         *
@@ -1102,7 +1114,7 @@ namespace app {
        void Init(util::CommandLineArgs &args)
        {
            bool disable_size_check = true;
-        
+
            // Get settings from command line arguments
            instrumented       = args.CheckCmdLineFlag("instrumented");
            disable_size_check = args.CheckCmdLineFlag("disable-size-check");
@@ -1153,7 +1165,7 @@ namespace app {
        static const bool           ENABLE_IDEMPOTENCE = _ENABLE_IDEMPOTENCE;
        static const bool           USE_DOUBLE_BUFFER  = _USE_DOUBLE_BUFFER ;
        static const bool           ENABLE_BACKWARD    = _ENABLE_BACKWARD   ;
-    
+
        /**
         * Load instruction cache-modifier const defines.
         */
@@ -1163,7 +1175,7 @@ namespace app {
        static const util::io::ld::CacheModifier ROW_OFFSET_ALIGNED_READ_MODIFIER       = util::io::ld::cg;             // Load instruction cache-modifier for reading CSR row-offsets (8-byte aligned)
        static const util::io::ld::CacheModifier ROW_OFFSET_UNALIGNED_READ_MODIFIER     = util::io::ld::NONE;           // Load instruction cache-modifier for reading CSR row-offsets (4-byte aligned)
        static const util::io::st::CacheModifier QUEUE_WRITE_MODIFIER                   = util::io::st::cg;             // Store instruction cache-modifier for writing outgoing frontier vertex-ids. Valid on SM2.0 or newer
-    
+
        // Members
        int                 num_gpus              ; // Number of GPUs to be sliced over
        int                 *gpu_idx              ; // GPU indices
@@ -1189,7 +1201,7 @@ namespace app {
        struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> * mpi_ring_buffer ; // the mpi ring buffer for receiving information
    #endif
        // Methods
-    
+
        /**
         * @brief ProblemBase default constructor
         */
@@ -1213,7 +1225,7 @@ namespace app {
        backward_convertions(NULL)
        {
        } // end ProblemBase()
-    
+
        /**
         * @brief ProblemBase default destructor to free all graph slices allocated.
         */
@@ -1231,7 +1243,7 @@ namespace app {
            delete[] graph_slices; graph_slices = NULL;
            delete[] gpu_idx;      gpu_idx      = NULL;
        } // end ~ProblemBase()
-    
+
        /**
         * @brief Get the GPU index for a specified vertex id.
         *
@@ -1243,7 +1255,7 @@ namespace app {
        int GpuIndex(VertexId vertex)
        {
            if (num_gpus <= 1) {
-            
+
                // Special case for only one GPU, which may be set as with
                // an ordinal other than 0.
                return graph_slices[0]->index;
@@ -1251,7 +1263,7 @@ namespace app {
                return partition_tables[0][vertex];
            }
        }
-    
+
        /**
         * @brief Get the row offset for a specified vertex id.
         *
@@ -1269,7 +1281,7 @@ namespace app {
                return convertion_tables[0][vertex];
            }
        }
-    
+
        /**
         * @brief Initialize problem from host CSR graph.
         *
@@ -1297,13 +1309,14 @@ namespace app {
                         float       partition_factor  = -1,
                         int         partition_seed    = -1)
        {
+
            cudaError_t retval      = cudaSuccess;
            this->org_graph         = graph;
            this->nodes             = graph->nodes;
            this->edges             = graph->edges;
            this->num_gpus          = num_gpus;
            this->gpu_idx           = new int [num_gpus];
-        
+
            do {
                if (num_gpus==1 && gpu_idx==NULL)
                {
@@ -1312,13 +1325,13 @@ namespace app {
                    for (int gpu=0;gpu<num_gpus;gpu++)
                        this->gpu_idx[gpu]=gpu_idx[gpu];
                }
-            
+
                graph_slices = new GraphSlice<SizeT, VertexId, Value>*[num_gpus];
-            
+
                if (num_gpus >1)
                {
                    util::CpuTimer cpu_timer;
-                
+
                    printf("partition_method = %s\n", partition_method.c_str());
                    if (partition_method=="random")
                        partitioner=new rp::RandomPartitioner   <VertexId, SizeT, Value, _ENABLE_BACKWARD, _KEEP_ORDER, _KEEP_NODE_NUM>
@@ -1352,7 +1365,7 @@ namespace app {
                                                    partition_seed);
                    cpu_timer.Stop();
                    printf("partition end. (%f ms)\n", cpu_timer.ElapsedMillis());fflush(stdout);
-                
+
                    /*graph->DisplayGraph("org_graph",graph->nodes);
                     util::cpu_mt::PrintCPUArray<SizeT,int>("partition0",partition_tables[0],graph->nodes);
                     util::cpu_mt::PrintCPUArray<SizeT,VertexId>("convertion0",convertion_tables[0],graph->nodes);
@@ -1386,7 +1399,7 @@ namespace app {
                } else {
                    sub_graphs=graph;
                }
-            
+
                for (int gpu=0;gpu<num_gpus;gpu++)
                {
                    graph_slices[gpu] = new GraphSlice<SizeT, VertexId, Value>(this->gpu_idx[gpu]);
@@ -1438,13 +1451,13 @@ namespace app {
                                                            NULL);
                    if (retval) break;
                }// end for (gpu)
-            
+
            } while (0);
-        
+
            return retval;
        } // end Init(...)
-    
-    
+
+
    #ifdef WITHMPI
        /**
         * @brief Initialize problem from host CSR graph. The procedure assumes that the partitioning will be done on all nodes
@@ -1484,24 +1497,30 @@ namespace app {
            this->num_gpus          = -1;     //  meant to break if used
            this->gpu_idx           = NULL;   //  Don't use it for MPI
            this->mpi_topology      = mpi_topology;
-        
+
            int rank = mpi_topology->local_rank;
            int num_gpus_local  = mpi_topology->num_gpus_per_server[rank];
            int num_gpus_global = mpi_topology->total_num_gpus;
-        
+
+           if(gpu_idx_local==NULL){
+               CHECKPOINT
+           }else{
+               printf("local_gpu=%d, start_offset=%d, num_local_gpus=%d\n",gpu_idx_local[0],local_gpu_idx_start,num_gpus_local);
+           }
+
            do {
                if (num_gpus_global==1 && gpu_idx_local==NULL)
                {
                    if (retval = util::GRError(cudaGetDevice(&(this->gpu_idx[0])), "ProblemBase cudaGetDevice failed", __FILE__, __LINE__)) break;
                }
-            
+
                graph_slices = new GraphSlice<SizeT, VertexId, Value>*[num_gpus_local];
-            
+
                if (num_gpus_global >1)
                {
                    util::CpuTimer cpu_timer;
-                
-                   printf("partition_method = %s\n", partition_method.c_str());
+
+
                    if (partition_method=="metis")
                        util::GRError("partition_method invalid for split partitioning (metis appears to be non-deterministic)", __FILE__,__LINE__);
                    //partitioner=new metisp::MetisPartitioner<VertexId, SizeT, Value, _ENABLE_BACKWARD, _KEEP_ORDER, _KEEP_NODE_NUM>
@@ -1529,13 +1548,11 @@ namespace app {
                                                    partition_seed);
                    cpu_timer.Stop();
                    printf("partition end. (%f ms)\n", cpu_timer.ElapsedMillis());fflush(stdout);
-                
                    if (retval) break;
                } else {
                    sub_graphs=graph;
                }
-            
-            
+
                /*only the slices are needed that processed on this node
                 * so for 2 nodes with GPUs [0 1 2] and [0 1], the partitioner
                 * creates 5 slices [0 1 2 3 4].
@@ -1544,9 +1561,10 @@ namespace app {
                 * hence, node0 gets slices 0 1 2 for GPUs 0 1 2
                 * and node1 gets slices 3 4 for GPUs 0 1
                 */
+
                for (int gpu=0; gpu<num_gpus_local; gpu++)
                {
-                   graph_slices[gpu] = new GraphSlice<SizeT, VertexId, Value>(this->gpu_idx[gpu]);
+                   graph_slices[gpu] = new GraphSlice<SizeT, VertexId, Value>(this->mpi_topology->local_gpu_mapping[rank][gpu]);
                    if (num_gpus_global > 1)
                    {
                        if (_ENABLE_BACKWARD)
@@ -1579,6 +1597,7 @@ namespace app {
                                                             NULL,
                                                             NULL,
                                                             NULL);
+
                    } else retval = graph_slices[gpu]->Init(
                                                            stream_from_host,
                                                            num_gpus_local,
@@ -1595,17 +1614,16 @@ namespace app {
                                                            NULL);
                    if (retval) break;
                }// end for (gpu)
-            
+
            } while (0);
-        
-           
-        
-        
+
+
+
            return retval;
        } // end Init(...)
    #endif
-    
-    
+
+
    };
 
 } // namespace app

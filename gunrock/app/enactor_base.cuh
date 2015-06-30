@@ -35,6 +35,8 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+
+#define HEADER_MPI_TAG 32767
 #endif
 
 using namespace mgpu;
@@ -48,7 +50,7 @@ namespace app {
 	                                SizeT1 *num,
 	                                SizeT2 *sum)
 	{
-	    sum[0]+=num[0];
+	    sum[0] += num[0];
 	}
 
 	/*
@@ -68,7 +70,7 @@ namespace app {
 	    util::Array1D<int, unsigned int> node_locks_out      ;
 	    cudaError_t                      retval              ;
 	    clock_t                          start_time          ;
-    
+
 	    EnactorStats()
 	    {
 	        iteration       = 0;
@@ -79,7 +81,7 @@ namespace app {
 	        node_locks_out.SetName("node_locks_out");
 	        total_queued  .SetName("total_queued");
 	    }
-    
+
 	    template <typename SizeT2>
 	    void Accumulate(SizeT2 *d_queued, cudaStream_t stream)
 	    {
@@ -104,7 +106,7 @@ namespace app {
 	    bool         has_incoming ;
 	    gunrock::oprtr::advance::TYPE
 	    advance_type ;
-    
+
 	    FrontierAttribute()
 	    {
 	        queue_length  = 0;
@@ -129,7 +131,7 @@ namespace app {
 	    ContextPtr   *context    ;
 	    util::cpu_mt::CPUBarrier
 	    *cpu_barrier;
-    
+
 	    ThreadSlice()
 	    {
 	        problem     = NULL;
@@ -140,7 +142,7 @@ namespace app {
 	        stats       = -2;
 	        cpu_barrier = NULL;
 	    }
-    
+
 	    virtual ~ThreadSlice()
 	    {
 	        problem     = NULL;
@@ -166,7 +168,7 @@ namespace app {
 	            printf("(CUDA error %d @ GPU %d: %s\n", enactor_stats[gpu].retval, gpu%num_gpus, cudaGetErrorString(enactor_stats[gpu].retval)); fflush(stdout);
 	            return true;
 	        }
-    
+
 	    //check if any local data slice is to be continued
 	    for (int gpu=0;gpu<num_gpus*num_gpus;gpu++)
 	        if (frontier_attribute[gpu].queue_length!=0 || frontier_attribute[gpu].has_incoming)
@@ -174,7 +176,7 @@ namespace app {
 	            //printf("frontier_attribute[%d].queue_length = %d\n",gpu,frontier_attribute[gpu].queue_length);
 	            return false;
 	        }
-    
+
 	    //check if any input buffers are still non-empty
 	    for (int gpu=0;gpu<num_gpus;gpu++)
 	        for (int peer=1;peer<num_gpus_global;peer++)
@@ -184,7 +186,7 @@ namespace app {
 	                    //printf("data_slice[%d]->in_length[%d][%d] = %d\n", gpu, i, peer, data_slice[gpu]->in_length[i][peer]);
 	                    return false;
 	                }
-    
+
 	    //check if any ouput buffers are still non-empty
 	    for (int gpu=0;gpu<num_gpus;gpu++)
 	        for (int peer=1;peer<num_gpus_global;peer++)
@@ -193,7 +195,7 @@ namespace app {
 	                //printf("data_slice[%d]->out_length[%d] = %d\n", gpu, peer, data_slice[gpu]->out_length[peer]);
 	                return false;
 	            }
-    
+
 	    return true;
 	}
 
@@ -208,7 +210,7 @@ namespace app {
 	    const SizeT STRIDE = gridDim.x * blockDim.x;
 	    VertexId x = blockIdx.x*blockDim.x+threadIdx.x;
 	    VertexId t;
-    
+
 	    while (x<num_elements)
 	    {
 	        t = keys[x];
@@ -229,7 +231,7 @@ namespace app {
 	    const SizeT STRIDE = gridDim.x * blockDim.x;
 	    VertexId x = blockIdx.x*blockDim.x + threadIdx.x;
 	    VertexId t, p;
-    
+
 	    while (x<num_elements)
 	    {
 	        t = keys[x];
@@ -255,7 +257,7 @@ namespace app {
 	    if (threadIdx.x < num_gpus)
 	        s_marker[threadIdx.x]=marker[threadIdx.x];
 	    __syncthreads();
-    
+
 	    while (x < num_elements)
 	    {
 	        key = keys_in[x];
@@ -282,7 +284,7 @@ namespace app {
 	    if (threadIdx.x < num_gpus)
 	        s_marker[threadIdx.x]=marker[threadIdx.x];
 	    __syncthreads();
-    
+
 	    while (x < num_elements)
 	    {
 	        key = keys_in[x];
@@ -322,21 +324,21 @@ namespace app {
 	    offset+=sizeof(Value*   )*num_gpus*num_value__associates;
 	    SizeT*     s_offset                = (SizeT*    )&(s_array[offset]);
 	    SizeT x= threadIdx.x;
-    
+
 	    while (x<array_size)
 	    {
 	        s_array[x]=array[x];
 	        x+=blockDim.x;
 	    }
 	    __syncthreads();
-    
+
 	    x= blockIdx.x * blockDim.x + threadIdx.x;
 	    while (x<num_elements)
 	    {
 	        VertexId key    = keys_in [x];
 	        int      target = partition_table[key];
 	        SizeT    pos    = s_marker[target][x]-1 + s_offset[target];
-        
+
 	        if (target==0)
 	        {
 	            s_keys_outs[0][pos]=key;
@@ -384,14 +386,14 @@ namespace app {
 	    offset+=sizeof(Value*   )*num_gpus*num_value__associates;
 	    SizeT*     s_offset                = (SizeT*    )&(s_array[offset]);
 	    SizeT x= threadIdx.x;
-    
+
 	    while (x<array_size)
 	    {
 	        s_array[x]=array[x];
 	        x+=blockDim.x;
 	    }
 	    __syncthreads();
-    
+
 	    x= blockIdx.x * blockDim.x + threadIdx.x;
 	    while (x<num_elements)
 	    {
@@ -401,7 +403,7 @@ namespace app {
 	        {
 	            int      target = partition_table[j];
 	            SizeT    pos    = s_marker[target][x]-1 + s_offset[target];
-            
+
 	            if (target==0)
 	            {
 	                s_keys_outs[0][pos]=key;
@@ -447,7 +449,7 @@ namespace app {
 	                       bool        keep_content = false)
 	{
 	    cudaError_t retval = cudaSuccess;
-    
+
 	    if (target_length > array->GetSize())
 	    {
 	        printf("%d\t %d\t %d\t %s \t oversize :\t %d ->\t %d\n",
@@ -484,6 +486,7 @@ namespace app {
 	void MPI_PushNeighbor(
 	                      int gpu,
 	                      int peer,
+	                      int original_peer,
 	                      int iteration,
 	                      int peer_server_idx,
 	                      SizeT             queue_length,
@@ -492,7 +495,8 @@ namespace app {
 	                      DataSlice         *data_slice_p,
 	                      GraphSlice        *graph_slice_l,
 	                      GraphSlice        *graph_slice_p,
-	                      MPI_Request ** sent_requests,
+	                      MPI_Request *** sent_requests,
+	                      int ** sent_requests_size,
 	                      MPI_Datatype mpi_vertex_type,
 	                      MPI_Datatype mpi_value__type)
 	{
@@ -504,71 +508,83 @@ namespace app {
 	    header[1] = iteration;
 	    header[2] = queue_length;
 	    header[3] = gpu_;
-	    if(MPI_SUCCESS != MPI_Isend(header, 3, MPI_INT, peer_server_idx, 0, MPI_COMM_WORLD,&(sent_requests[peer][0])))
+	    if(MPI_SUCCESS != MPI_Isend(header, 4, MPI_INT, peer_server_idx, HEADER_MPI_TAG, MPI_COMM_WORLD,&(sent_requests[gpu][original_peer][0])))
 	    {
 	        printf("Unable to sent header to server %i\n", peer_server_idx);
 	        return;
 	    }
-    
-	    int sent_flag_counter=0;
-	    if(MPI_SUCCESS != MPI_Isend(
+		int sent_flag_counter=0;
+		printf("sent_requests[%d][%d] filled  %s:%d\n",gpu,original_peer,__FILE__,__LINE__);fflush(stdout);
+		if(queue_length>0)
+		{
+			VertexId * a = data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE);
+			int* b=(int*)malloc(sizeof(int)*queue_length);
+
+			//cudaError_t rv = cudaMemcpy(b,data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),sizeof(int)*queue_length,cudaMemcpyDeviceToHost);
+	    	if(MPI_SUCCESS != MPI_Isend(
 	                                data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),
 	                                queue_length,
 	                                mpi_vertex_type,
 	                                peer_server_idx,
 	                                gpu,
 	                                MPI_COMM_WORLD,
-	                                &(sent_requests[gpu][sent_flag_counter])))
-	    {
-	        fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
-	        return;
-	    }
+	                                &(sent_requests[gpu][original_peer][sent_flag_counter])))
+	    	{
+	        	fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
+	        	return;
+	    	}
 	    sent_flag_counter++;
-    
-	    for (int i=0;i<num_vertex_associate;i++)
-	    {
-	        if(MPI_SUCCESS != MPI_Isend(
-	                                    data_slice_l->vertex_associate_outs[peer_][i],
-	                                    queue_length,
-	                                    mpi_vertex_type,
-	                                    peer_server_idx,
-	                                    gpu,
-	                                    MPI_COMM_WORLD,
-	                                    &(sent_requests[gpu][sent_flag_counter])))
-	        {
-	            fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
-	            return;
-	        }
-	        sent_flag_counter++;
-	    }
-    
-	    for (int j=0;j<num_value__associate;j++)
-	    {
-	        if(MPI_SUCCESS != MPI_Isend(
-	                                    data_slice_l->value__associate_outs[peer_][j],
-	                                    queue_length,
-	                                    mpi_vertex_type,
-	                                    peer_server_idx,
-	                                    gpu,
-	                                    MPI_COMM_WORLD,
-	                                    &(sent_requests[gpu][sent_flag_counter])))
-	        {
-	            fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
-	            return;
-	        }
-	        sent_flag_counter++;
-	    }
-    
+
+
+		    for (int i=0;i<num_vertex_associate;i++)
+		    {
+		        if(MPI_SUCCESS != MPI_Isend(
+		                                    data_slice_l->vertex_associate_outs[peer_][i],
+		                                    queue_length,
+		                                    mpi_vertex_type,
+		                                    peer_server_idx,
+		                                    gpu,
+		                                    MPI_COMM_WORLD,
+		                                    &(sent_requests[gpu][original_peer][sent_flag_counter])))
+		        {
+		            fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
+		            return;
+		        }
+		        sent_flag_counter++;
+		    }
+
+		    for (int j=0;j<num_value__associate;j++)
+		    {
+		        if(MPI_SUCCESS != MPI_Isend(
+		                                    data_slice_l->value__associate_outs[peer_][j],
+		                                    queue_length,
+		                                    mpi_vertex_type,
+		                                    peer_server_idx,
+		                                    gpu,
+		                                    MPI_COMM_WORLD,
+		                                    &(sent_requests[gpu][original_peer][sent_flag_counter])))
+		        {
+		            fprintf(stderr,"MPI_Isend error in MPI_PushNeighbor %s:%d\n",__FILE__,__LINE__);
+		            return;
+		        }
+		        sent_flag_counter++;
+		    }
+		}else{
+			printf("empty message sent to %i\n",peer_server_idx); fflush(stdout);
+		}
+		sent_requests_size[gpu][original_peer]=sent_flag_counter;
+
 	}
 
 
-	int MPI_Communication_Check(MPI_Request ** sent_requests, int peer, int num_gpus_global, int num_flags)
+	int MPI_Communication_Check(MPI_Request *** sent_requests, int ** size, int gpu, int peer, int num_gpus_global)
 	{
 	    MPI_Status status;
-	    int flag;
+	    int flag=1;
+		int num_flags = size[gpu][peer];
 	    if(peer > num_gpus_global) return 0;
 	    for(int f=0; f<num_flags; f++){
-	        MPI_Test(&(sent_requests[peer][f]), &flag, &status);
+	        MPI_Test(&(sent_requests[gpu][peer][f]), &flag, &status);
 	        if(flag==0) return 0;
 	    }
 	    return 1;
@@ -603,11 +619,11 @@ namespace app {
 	    int i, t  = enactor_stats->iteration%2;
 	    bool to_reallocate = false;
 	    bool over_sized    = false;
-    
+
 	    data_slice_p->in_length[enactor_stats->iteration%2][gpu_]
 	    = queue_length;
 	    if (queue_length == 0) return;
-    
+
 	    if (data_slice_p -> keys_in[t][gpu_].GetSize() < queue_length) to_reallocate=true;
 	    else {
 	        for (i=0;i<num_vertex_associate;i++)
@@ -616,7 +632,7 @@ namespace app {
 	            for (i=0;i<num_value__associate;i++)
 	                if (data_slice_p->value__associate_in[t][gpu_][i].GetSize() < queue_length) {to_reallocate=true;break;}
 	    }
-    
+
 	    //if to_reallocate then change GPU index and do cudaMemcpyAsync to copy the data to the new GPU
 	    if (to_reallocate)
 	    {
@@ -625,7 +641,7 @@ namespace app {
 	        if (enactor_stats->retval = Check_Size<SIZE_CHECK, SizeT, VertexId>(
 	                                                                            "keys_in", queue_length, &data_slice_p->keys_in[t][gpu_], over_sized,
 	                                                                            gpu, enactor_stats->iteration, peer)) return;
-        
+
 	        //check size for vertex associates
 	        for (i=0;i<num_vertex_associate;i++)
 	        {
@@ -634,7 +650,7 @@ namespace app {
 	                                                                                gpu, enactor_stats->iteration, peer)) return;
 	            data_slice_p->vertex_associate_ins[t][gpu_][i] = data_slice_p->vertex_associate_in[t][gpu_][i].GetPointer(util::DEVICE);
 	        }
-        
+
 	        //check size for value associates
 	        for (i=0;i<num_value__associate;i++)
 	        {
@@ -643,7 +659,7 @@ namespace app {
 	                                                                             gpu, enactor_stats->iteration, peer)) return;
 	            data_slice_p->value__associate_ins[t][gpu_][i] = data_slice_p->value__associate_in[t][gpu_][i].GetPointer(util::DEVICE);
 	        }
-        
+
 	        if (SIZE_CHECK)
 	        {
 	            if (enactor_stats->retval = data_slice_p->vertex_associate_ins[t][gpu_].Move(util::HOST, util::DEVICE)) return;
@@ -651,14 +667,14 @@ namespace app {
 	            util::SetDevice(data_slice_l->gpu_idx);
 	        }
 	    }
-    
-    
+
+
 	    if (enactor_stats-> retval = util::GRError(cudaMemcpyAsync(
 	                                                               data_slice_p -> keys_in[t][gpu_].GetPointer(util::DEVICE),
 	                                                               data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),
 	                                                               sizeof(VertexId) * queue_length, cudaMemcpyDefault, stream),
 	                                               "cudaMemcpyPeer keys failed", __FILE__, __LINE__)) return;
-    
+
 	    for (int i=0;i<num_vertex_associate;i++)
 	    {
 	        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
@@ -667,7 +683,7 @@ namespace app {
 	                                                                  sizeof(VertexId) * queue_length, cudaMemcpyDefault, stream),
 	                                                  "cudaMemcpyPeer vertex_associate_out failed", __FILE__, __LINE__)) return;
 	    }
-    
+
 	    for (int i=0;i<num_value__associate;i++)
 	    {
 	        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
@@ -699,7 +715,7 @@ namespace app {
 	    typedef typename Problem::VertexId VertexId;
 	    typedef typename Problem::Value    Value;
 	    SizeT queue_length;
-    
+
 	    //util::cpu_mt::PrintMessage(check_name.c_str(), thread_num, enactor_stats->iteration);
 	    //printf("%d \t %d\t \t reset = %d, index = %d\n",thread_num, enactor_stats->iteration, frontier_attribute->queue_reset, frontier_attribute->queue_index);fflush(stdout);
 	    //if (frontier_attribute->queue_reset)
@@ -784,13 +800,12 @@ namespace app {
 	    Problem      *problem              =  (Problem*) thread_data->problem;
 	    Enactor      *enactor              =  (Enactor*) thread_data->enactor;
 	    int rank                           =  problem -> mpi_topology -> local_rank;
-	    //int num_gpu_local                  =  problem -> mpi_topology -> num_gpus_per_server[rank];
+	    int num_gpu_local                  =  problem -> mpi_topology -> num_gpus_per_server[rank];
 	    int num_gpu_global                 =  problem -> mpi_topology -> total_num_gpus;
+
 	    int gpu                            =  problem -> mpi_topology -> global_gpu_maping[rank][thread_data -> thread_num];
 	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer;
-    
-    
-	    DataSlice    *data_slice           =   problem     -> data_slices        [gpu].GetPointer(util::HOST);
+
 	    /* util::Array1D<SizeT, DataSlice>
 	     *s_data_slice         =   problem     -> data_slices; */
 	    FrontierAttribute<SizeT>
@@ -801,38 +816,88 @@ namespace app {
 	    EnactorStats *s_enactor_stats      = &(enactor     -> enactor_stats      [0         ]);
 	    util::CtaWorkProgressLifetime
 	    *work_progress        = &(enactor     -> work_progress      [gpu * num_gpu_global]);
-	    
-	    int          *stages               =   data_slice  -> stages .GetPointer(util::HOST);
-	    bool         *to_show              =   data_slice  -> to_show.GetPointer(util::HOST);
-	    printf("MPI loop ready for action\n");
-    
-	    //header
-	    //3 integers: sending gpu, iteration, length of context
-    
-	    while(!mpi_ring_buffer->all_done)
+		util::Array1D<SizeT, DataSlice>
+	    *s_data_slice         =   problem     -> data_slices;
+		thread_data->stats = 1;
+	    printf("MPI loop waiting for rest of program ...\n");
+		while(thread_data->stats ==1){sleep(0);}
+
+		printf("MPI loop ready!\n");
+		int final_run=0;
+
+printf("%s:%d problem-> data_slices -> [0]->PR_queue_length=%d\n",__FILE__,__LINE__,problem -> data_slices[0]->PR_queue_length);fflush(stdout);
+		mpi_ring_buffer->all_done=Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+		//set the checked variable to release the Iteration_Loop threads
+printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
+		for(int g=0; g<num_gpu_local; g++)
+		{
+			mpi_ring_buffer->checked[g]=3;
+		}
+
+printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
+		int threads_released=0;
+		while(!threads_released){
+			threads_released=1;
+			for(int g=0;g<num_gpu_local; g++){
+				if(mpi_ring_buffer->checked[g]==3)
+				{
+					threads_released=0;
+				}
+			}
+			sleep(0);
+		}
+
+printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
+		printf("MPI loop set!\n");
+CHECKPOINT_RTT
+
+	    while(!mpi_ring_buffer->all_done || final_run)
 	    {
+			mpi_ring_buffer->all_done = Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+			//set the checked variable to release the Iteration_Loop threads
+			for(int g=0; g<num_gpu_local; g++)
+			{
+				mpi_ring_buffer->checked[g]=2;
+			}
+
+printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
+			int threads_released=0;
+			while(!threads_released){
+				threads_released=1;
+				for(int g=0;g<num_gpu_local; g++){
+					if(mpi_ring_buffer->checked[g]==2)
+					{
+						threads_released=0;
+					}
+				}
+				sleep(0);
+			}
+			printf("MPI loop go!\n");
+printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
+printf("mpi_ring_buffer->all_done = %s\n",mpi_ring_buffer->all_done ? "TRUE" : "FALSE");fflush(stdout);
 	        int recv_counter = problem->mpi_topology->num_servers-1;
-        
+
 	        //for all peers, do a blocking call to wait for the header first and then the data
 	        while(recv_counter!=0){
-	            int header_length=3;
+	            int header_length=4;
 	            int header[4];
 	            MPI_Status status;
 				MPI_Request receive_request;
+printf("while(recv_counter!=0){ with recv_counter=%d\n",recv_counter);fflush(stdout);
 
-            
-	            if(MPI_SUCCESS != MPI_Irecv(&header, header_length, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &receive_request))
+	            if(MPI_SUCCESS != MPI_Irecv(&header, header_length, MPI_INT, MPI_ANY_SOURCE, HEADER_MPI_TAG, MPI_COMM_WORLD, &receive_request))
 	            {
 	                fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
 	                return;
 	            }
+				printf("waiting to receive message\n");
 				int received=false;
 				while(!mpi_ring_buffer->all_done && !received){
 					sleep(0);
 					MPI_Test(&receive_request, &received, &status);
 				}
-				if(mpi_ring_buffer->all_done) return; 
-				
+				if(mpi_ring_buffer->all_done) return;
+
 	            int sender_rank     = status.MPI_SOURCE;
 	            int sender_gpu      = header[0];
 	            //int sender_iter     = header[1];
@@ -843,79 +908,100 @@ namespace app {
 	            {
 	                printf("Incoming message from %i: [%i, %i, %i, %i] ",sender_rank, header[0], header[1], header[2], header[3]);
 	            }
-            
-            
+
+
 	            //int peer_ = sender_gpu<gpu? sender_gpu+1 : sender_gpu;
-            
-            
+
+
 	            //check for buffer overflow
 	            int incoming_ring_buffer_pos = (mpi_ring_buffer->front_pos[sender_gpu] + 1) % mpi_ring_buffer->length;
+
 	            if(incoming_ring_buffer_pos  == mpi_ring_buffer->back_pos[sender_gpu])
 	            {
 	                fprintf(stderr,"incoming buffer overflow\n");
 	                return;
 	            }
-            
-	            //check if the memory allocated in the ring buffer is large enough
-	            if(mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos] < sender_msg_len)
-	            {
-	                //free buffer if previously allocated
-	                if(mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos]>0)
-	                {
-	                    free(mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]);
-	                    free(mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]);
-	                    free(mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]);
-	                }
-	                //allocate buffer
-	                mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]=(VertexId *)malloc(sizeof(VertexId) * sender_msg_len);
-	                if(mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]==NULL)
-	                {
-	                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
-	                }
-	                mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]=(VertexId *)malloc(sizeof(VertexId) * sender_msg_len * mpi_ring_buffer->num_vertex_associate);
-	                if(mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]==NULL)
-	                {
-	                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
-	                }
-	                mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]=(Value *)malloc(sizeof(Value) * sender_msg_len * mpi_ring_buffer->num_value__associate);
-	                if(mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]==NULL)
-	                {
-	                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
-	                }
-	                mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos]=sender_msg_len;
-	            }
-            	mpi_ring_buffer->msg_length[sender_gpu][incoming_ring_buffer_pos]=sender_msg_len;
-					
-	            if(MPI_SUCCESS != MPI_Recv((&mpi_ring_buffer->buffer_keys[sender_gpu]), sender_msg_len, mpi_ring_buffer->mpi_vertex_type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
-	            {
-	                fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
-	                return;
-	            }
-	            int offset=0;
-	            for(int i=0;i<mpi_ring_buffer->num_vertex_associate; i++){
-	                if(MPI_SUCCESS != MPI_Recv(&(mpi_ring_buffer->buffer_vertex[sender_gpu])+offset, sender_msg_len, mpi_ring_buffer->mpi_vertex_type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
-	                {
-	                    fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
-	                    return;
-	                }
-	                offset+=sender_msg_len;
-	            }
-	            offset=0;
-	            for(int j=0;j<mpi_ring_buffer->num_value__associate; j++){
-	                if(MPI_SUCCESS != MPI_Recv(&(mpi_ring_buffer->buffer_value[sender_gpu]), sender_msg_len, mpi_ring_buffer->mpi_value__type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
-	                {
-	                    fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
-	                    return;
-	                }
-	                offset+=sender_msg_len;
-	            }
-	            mpi_ring_buffer->front_pos[sender_gpu]=incoming_ring_buffer_pos;
+				mpi_ring_buffer->msg_length[sender_gpu][incoming_ring_buffer_pos]=sender_msg_len;
+				if(sender_msg_len>0)
+				{
+		            //check if the memory allocated in the ring buffer is large enough
+		            if(mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos] < sender_msg_len)
+		            {
+		                //free buffer if previously allocated
+		                if(mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos]>0)
+		                {
+		                    free(mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]);
+		                    free(mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]);
+		                    free(mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]);
+		                }
+		                //allocate buffer
+		                mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]=(VertexId *)malloc(sizeof(VertexId) * sender_msg_len);
+		                if(mpi_ring_buffer->buffer_keys[sender_gpu][incoming_ring_buffer_pos]==NULL)
+		                {
+		                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
+		                }
+		                mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]=(VertexId *)malloc(sizeof(VertexId) * sender_msg_len * mpi_ring_buffer->num_vertex_associate);
+		                if(mpi_ring_buffer->buffer_vertex[sender_gpu][incoming_ring_buffer_pos]==NULL)
+		                {
+		                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
+		                }
+		                mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]=(Value *)malloc(sizeof(Value) * sender_msg_len * mpi_ring_buffer->num_value__associate);
+		                if(mpi_ring_buffer->buffer_value[sender_gpu][incoming_ring_buffer_pos]==NULL)
+		                {
+		                    fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
+		                }
+		                mpi_ring_buffer->allocated[sender_gpu][incoming_ring_buffer_pos]=sender_msg_len;
+		            }
+
+
+		            if(MPI_SUCCESS != MPI_Recv((&mpi_ring_buffer->buffer_keys[sender_gpu]), sender_msg_len, mpi_ring_buffer->mpi_vertex_type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
+		            {
+		                fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
+		                return;
+		            }
+		            int offset=0;
+		            for(int i=0;i<mpi_ring_buffer->num_vertex_associate; i++){
+		                if(MPI_SUCCESS != MPI_Recv(&(mpi_ring_buffer->buffer_vertex[sender_gpu])+offset, sender_msg_len, mpi_ring_buffer->mpi_vertex_type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
+		                {
+		                    fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
+		                    return;
+		                }
+		                offset+=sender_msg_len;
+		            }
+		            offset=0;
+		            for(int j=0;j<mpi_ring_buffer->num_value__associate; j++){
+		                if(MPI_SUCCESS != MPI_Recv(&(mpi_ring_buffer->buffer_value[sender_gpu]), sender_msg_len, mpi_ring_buffer->mpi_value__type, sender_rank, sender_gpu, MPI_COMM_WORLD, &status))
+		                {
+		                    fprintf(stderr,"MPI_Recv error in MPI_Comm_Loop (header)\n");
+		                    return;
+		                }
+		                offset+=sender_msg_len;
+		            }
+
+				}
+				mpi_ring_buffer->front_pos[sender_gpu] = incoming_ring_buffer_pos;
+printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[sender_gpu]-mpi_ring_buffer->back_pos[sender_gpu],sender_gpu);
 	            recv_counter--;
 	        }
+			if(!final_run==0)
+			{
+				if(mpi_ring_buffer->all_done == 1)
+				{
+					;
+					// we need to keep the communication loop running for one more iteration on rank 0
+					// so that the other ranks can sent their final data
+					final_run = rank==0?1:0;
+				}
+			}
+			else
+			{
+				final_run=0;
+			}
+
 	    }
-    
+
 	}
-	
+
 	template <
 	bool     SIZE_CHECK,
 	typename SizeT,
@@ -943,13 +1029,13 @@ namespace app {
 		}
 		int buffer_pos = mpi_ring_buffer->back_pos[peer];
 		int queue_length = mpi_ring_buffer->msg_length[peer][buffer_pos];
-		
+
 	    if (enactor_stats-> retval = util::GRError(cudaMemcpyAsync(
 	                                                               target_data_slice -> keys_in[t][peer_].GetPointer(util::DEVICE),
 	                                                               mpi_ring_buffer -> buffer_keys[peer][buffer_pos],
 	                                                               sizeof(VertexId) * queue_length, cudaMemcpyDefault, stream),
 	                                               "cudaMemcpyPeer keys failed", __FILE__, __LINE__)) return;
-    
+
 	    for (int i=0;i<num_vertex_associate;i++)
 	    {
 	        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
@@ -958,7 +1044,7 @@ namespace app {
 	                                                                  sizeof(VertexId) * queue_length, cudaMemcpyDefault, stream),
 	                                                  "cudaMemcpyPeer vertex_associate_out failed", __FILE__, __LINE__)) return;
 	    }
-    
+
 	    for (int i=0;i<num_value__associate;i++)
 	    {
 	        if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
@@ -967,7 +1053,7 @@ namespace app {
 	                                                                  sizeof(Value) * queue_length, cudaMemcpyDefault, stream),
 	                                                  "cudaMemcpyPeer value__associate_out failed", __FILE__, __LINE__)) return;
 	    }
-		
+
 	}
 
 	#endif
@@ -989,9 +1075,9 @@ namespace app {
 	    typedef typename Problem::Value       Value     ;
 	    typedef typename Problem::DataSlice   DataSlice ;
 	    typedef GraphSlice<SizeT, VertexId, Value>  GraphSlice;
-    
-    
-    
+
+
+
 	    Problem      *problem              =  (Problem*) thread_data->problem;
 	    Enactor      *enactor              =  (Enactor*) thread_data->enactor;
 	#ifdef WITHMPI
@@ -999,6 +1085,7 @@ namespace app {
 	    //int num_gpu_local                  =  problem -> mpi_topology -> num_gpus_per_server[rank];
 	    int num_gpu_global                 =  problem -> mpi_topology -> total_num_gpus;
 	    int gpu                            =  problem -> mpi_topology -> global_gpu_maping[rank][thread_data -> thread_num];
+		//int gpu                             =thread_data -> thread_num;
 	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer;
 	#else
 	    int rank                           =  0;
@@ -1006,24 +1093,31 @@ namespace app {
 	    int num_gpu_global                 =  problem -> num_gpu;
 	    int gpu                            =  thread_data -> thread_num;
 	#endif
-    
-	    DataSlice    *data_slice           =   problem     -> data_slices        [gpu].GetPointer(util::HOST);
+		int local_gpu                            =  thread_data -> thread_num;
+	printf("%s:%d problem-> data_slices -> [0]->PR_queue_length=%d\n",__FILE__,__LINE__,problem -> data_slices[0]->PR_queue_length);fflush(stdout);
+
+printf("\e[%imthread %d checkpoint %s:%d || gpu=%d; data_slice exist %s\e[39m\n", 32+problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, gpu,
+problem     -> data_slices ==NULL? "no" : "yes");fflush(stdout);
+
+	    DataSlice    *data_slice           =   problem     -> data_slices        [local_gpu].GetPointer(util::HOST);
+
 	    util::Array1D<SizeT, DataSlice>
 	    *s_data_slice         =   problem     -> data_slices;
-	    GraphSlice   *graph_slice          =   problem     -> graph_slices       [gpu] ;
+	    GraphSlice   *graph_slice          =   problem     -> graph_slices       [local_gpu] ;
 	    GraphSlice   **s_graph_slice       =   problem     -> graph_slices;
 	    FrontierAttribute<SizeT>
-	    *frontier_attribute   = &(enactor     -> frontier_attribute [gpu * num_gpu_global]);
+	    *frontier_attribute   = &(enactor     -> frontier_attribute [thread_data -> thread_num * num_gpu_global]);
 	    FrontierAttribute<SizeT>
 	    *s_frontier_attribute = &(enactor     -> frontier_attribute [0         ]);
-	    EnactorStats *enactor_stats        = &(enactor     -> enactor_stats      [gpu * num_gpu_global]);
+	    EnactorStats *enactor_stats        = &(enactor     -> enactor_stats      [thread_data -> thread_num * num_gpu_global]);
 	    EnactorStats *s_enactor_stats      = &(enactor     -> enactor_stats      [0         ]);
 	    util::CtaWorkProgressLifetime
-	    *work_progress        = &(enactor     -> work_progress      [gpu * num_gpu_global]);
+	    *work_progress        = &(enactor     -> work_progress      [thread_data -> thread_num * num_gpu_global]);
 	    ContextPtr   *context              =   thread_data -> context;
 	    int          *stages               =   data_slice  -> stages .GetPointer(util::HOST);
 	    bool         *to_show              =   data_slice  -> to_show.GetPointer(util::HOST);
 	    cudaStream_t *streams              =   data_slice  -> streams.GetPointer(util::HOST);
+
 	    SizeT         Total_Length         =   0;
 	    cudaError_t   tretval              =   cudaSuccess;
 	    int           grid_size            =   0;
@@ -1041,23 +1135,46 @@ namespace app {
 	    *work_progress_       =   NULL;
 	    util::Array1D<SizeT, SizeT>
 	    *scanned_edges_       =   NULL;
-	    int           peer, peer_, peer__, gpu_, i, iteration_, wait_count;
+	    int           peer, peer_, peer__, gpu_, i, iteration_, wait_count, original_peer;
 	    bool          over_sized;
-    
-	    printf("Iteration entered\n");fflush(stdout);
-    
-	#ifdef WITHMPI
-	    MPI_Request **sent_requests = (MPI_Request **)malloc(sizeof(MPI_Request *)*num_gpu_global);
-	    for(int i=0;i<num_gpu_global; i++)
+
+
+	    printf("\e[%imIteration entered\e[39m\n",32+problem -> mpi_topology->local_rank);fflush(stdout);
+CHECKPOINT_RTT
+#ifdef WITHMPI
+
+	    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*num_gpu_global);
+		int **sent_request_size = (int**)malloc(sizeof(int*)*num_gpu_global);
+		if(sent_requests==NULL || sent_request_size==NULL){
+			printf("No more memory\n");
+			return;
+		}
+	    for(int g=0;g<num_gpu_global; g++)
 	    {
-	        sent_requests[i]=(MPI_Request *)malloc(sizeof(MPI_Request)*4);
+			sent_requests[g] = (MPI_Request **)malloc(sizeof(MPI_Request*)*num_gpu_global);
+			sent_request_size[g] = (int*)malloc(sizeof(int*)*num_gpu_global);
+			if(sent_requests[g]==NULL || sent_request_size[g]==NULL){
+				printf("No more memory\n");
+				return;
+			}
+			for(int p=0;p<num_gpu_global; p++){
+					sent_requests[g][p]=(MPI_Request *)malloc(sizeof(MPI_Request)*4);
+					if(sent_requests[g][p]==NULL){
+						printf("No more memory\n");
+						return;
+					}
+			}
 	    }
-    
-	    while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology))
-	#else
-	        while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
-	#endif
+
+		while(problem->mpi_ring_buffer->checked[local_gpu]==0){sleep(0);}
+		problem->mpi_ring_buffer->checked[local_gpu]=0;
+printf("**************** set to 0 once\n");
+	    while (!problem->mpi_ring_buffer->all_done)
+#else
+	    while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
+#endif
 	        {
+
 	            Total_Length             = 0;
 	            data_slice->wait_counter = 0;
 	            tretval                  = cudaSuccess;
@@ -1090,15 +1207,19 @@ namespace app {
 	                for (i=0; i<data_slice->num_stages; i++)
 	                    data_slice->events_set[enactor_stats[0].iteration%4][peer][i]=false;
 	            }
-            
-	#ifdef WITHMPI
-	            while (data_slice->wait_counter < num_gpu_global*2
-	                   && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem->mpi_topology)))
-	#else
+
+#ifdef WITHMPI
+				while(problem->mpi_ring_buffer->checked[local_gpu]==0){sleep(0);}
+				problem->mpi_ring_buffer->checked[local_gpu]=0;
+
+	            while (data_slice->wait_counter < num_gpu_global*2 && !problem->mpi_ring_buffer->all_done)
+#else
 	                while (data_slice->wait_counter < num_gpu_global*2
 	                       && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local)))
-	#endif
+#endif
 	                {
+
+
 	                    for (peer__=0; peer__<num_gpu_global*2; peer__++)
 	                    /*
 	                     *
@@ -1139,8 +1260,10 @@ namespace app {
 	                     *
 	                     */
 	                    {
+
 	                        peer_               = (peer__%num_gpu_global);
 	                        peer                = peer_<= gpu? peer_-1   : peer_       ;
+							original_peer       = peer_ <= gpu ? peer_-1 : peer_;
 	                        gpu_                = peer <  gpu? gpu: gpu+1;
 	                        iteration           = enactor_stats[peer_].iteration;
 	                        iteration_          = iteration%4;
@@ -1151,7 +1274,7 @@ namespace app {
 	                        frontier_attribute_ = &(frontier_attribute         [peer_]);
 	                        enactor_stats_      = &(enactor_stats              [peer_]);
 	                        work_progress_      = &(work_progress              [peer_]);
-                        
+CHECKPOINT_RTL
 	                        if (Enactor::DEBUG && to_show[peer__])
 	                        {
 	                            mssg=" ";mssg[0]='0'+data_slice->wait_counter;
@@ -1166,43 +1289,83 @@ namespace app {
 	                                                   mssg,
 	                                                   streams[peer__]);
 	                        }
+CHECKPOINT_RTL
 	                        to_show[peer__]=true;
-                        
 	                        switch (stages[peer__])
 	                        {
 	                            case 0: // Assign marker & Scan and send & receive
-	#ifdef WITHMPI
+#ifdef WITHMPI
 	                                if (peer_==0) {
 	                                    if (peer__==num_gpu_global	|| frontier_attribute_->queue_length==0)
 	                                    {
+CHECKPOINT_RTT
 	                                        stages[peer__]=3;
 	                                    } else if (!Iteration::HAS_SUBQ) { //process subqueue if that is necessary
+CHECKPOINT_RTT
 	                                        stages[peer__]=2;
 	                                    }
 	                                    break;
+
 	                                } else if ((iteration==0 || data_slice->out_length[peer_]==0) && peer__>num_gpu_global) {
+
 	                                    //initialize the income stream event flag
-	                                    Set_Record(data_slice, iteration, peer_, 0, streams[peer__]);
+										if(problem->mpi_topology->rank_of_gpu[peer] == problem->mpi_topology->rank_of_gpu[gpu])
+										{
+	                                        Set_Record(data_slice, iteration, peer_, 0, streams[peer__]);
+										}else{
+											MPI_PushNeighbor <
+	                                        Enactor::SIZE_CHECK,
+	                                        SizeT,
+	                                        VertexId,
+	                                        Value,
+	                                        GraphSlice,
+	                                        DataSlice,
+	                                        NUM_VERTEX_ASSOCIATES,
+	                                        NUM_VALUE__ASSOCIATES
+	                                        > (gpu,
+	                                           peer,
+											   original_peer,
+	                                           iteration,
+	                                           problem->mpi_topology->rank_of_gpu[peer],
+	                                           0,
+	                                           enactor_stats_,
+	                                           s_data_slice  [gpu] .GetPointer(util::HOST),
+	                                           s_data_slice  [peer].GetPointer(util::HOST),
+	                                           s_graph_slice [gpu],
+	                                           s_graph_slice [peer],
+	                                           sent_requests,
+											   sent_request_size,
+	                                           mpi_ring_buffer->mpi_vertex_type,
+	                                           mpi_ring_buffer->mpi_value__type
+	                                           );
+										}
+
 	                                    stages[peer__]=3;
 	                                    break;
 	                                }
-                                
+CHECKPOINT_RTL
 	                                if (peer__<num_gpu_global) //incoming data
 	                                { //wait and expand incoming
-	                                    if(problem->mpi_topology->rank_of_gpu[peer_] != problem->mpi_topology->rank_of_gpu[gpu])  //if data was received via MPI from another node
+CHECKPOINT_RTT
+	                                    if(problem->mpi_topology->rank_of_gpu[original_peer] != problem->mpi_topology->rank_of_gpu[gpu])  //if data was received via MPI from another node
 	                                    {
-											
-	                                        if(!mpi_ring_buffer->has_data(peer_))
+CHECKPOINT_RTL
+
+	                                        if(!mpi_ring_buffer->has_data(original_peer))
 	                                        {//if not, do nothing
+CHECKPOINT_RTT
 	                                            to_show[peer__]=false;
 	                                            stages[peer__]--;        //at the end ofthe loop, the stages increase. Hence "--" means to stay in stage 0
 	                                            break;
-	                                        }
-	                                        if(!mpi_ring_buffer->allocated[peer_][0]) //check if actually data is in the input queue
+	                                        }else{printf("DATA RECEIVED! %s:%d\n",__FILE__,__LINE__); fflush(stdout);}
+CHECKPOINT_RTT
+	                                        if(!mpi_ring_buffer->msg_length[original_peer][0]) //check if actually data is in the input queue
 	                                        {
+CHECKPOINT_RTT
 	                                            stages[peer__]=3;
 	                                            break;
 	                                        }
+CHECKPOINT_RTT
 	                                        offset = 0;
 	                                        //copy data to the expand_incoming_array from
 	                                        //    vertex_associate_ins[iteration%2][peer_]
@@ -1210,13 +1373,14 @@ namespace app {
 	                                        //    vertex_associate_orgs
 	                                        //    value__associate_orgs
 	                                        //
-	                                        int buffer_pos = mpi_ring_buffer->back_pos[peer];
-                                        	int msg_length = mpi_ring_buffer->msg_length[peer][buffer_pos];
-											
+	                                        int buffer_pos = mpi_ring_buffer->back_pos[original_peer];
+                                        	int msg_length = mpi_ring_buffer->msg_length[original_peer][buffer_pos];
+
 											/* copy data from buffer_1 to buffer_2
 											MPI_buffer2receiving_device(mpi_ring_buffer,peer,
 											s_data_slice  [gpu].GetPointer(util::HOST),streams[peer__]);
 											*/
+CHECKPOINT_RTT
 											MPI_buffer2receiving_device<
 	                                        Enactor::SIZE_CHECK,
 	                                        SizeT,
@@ -1229,15 +1393,15 @@ namespace app {
 	                                        >(
 												mpi_ring_buffer,
 												peer_,   //virtual peer number
-												peer,    //real peer number
+												original_peer,    //real peer number
 												enactor_stats,
 												s_data_slice[gpu].GetPointer(util::HOST),
 												streams[peer__]);
-											
+CHECKPOINT_RTL
 											//wait for copy to complete. This should be asynchroneously done
 								            if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(data_slice->streams[peer__]),
 								                        "cudaStreamSynchronize failed", __FILE__, __LINE__)) break;
-											
+
 	                                        memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
 	                                               data_slice -> vertex_associate_ins[iteration%2][peer_].GetPointer(util::HOST),
 	                                               sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES);
@@ -1254,27 +1418,31 @@ namespace app {
 	                                               data_slice -> value__associate_orgs.GetPointer(util::HOST),
 	                                               sizeof(Value*   ) * NUM_VALUE__ASSOCIATES);
 	                                        offset += sizeof(Value*   ) * NUM_VALUE__ASSOCIATES ;
-
+CHECKPOINT_RTL
 	                                    }
 	                                    else   //data was received via CudaMemcpy
 	                                    {
+CHECKPOINT_RTT
 	                                        if (!(s_data_slice[peer]->events_set[iteration_][gpu_][0])) //check if event happened
 	                                        {   //if not, do nothing
+CHECKPOINT_RTT
 	                                            to_show[peer__]=false;
 	                                            stages[peer__]--;        //at the end ofthe loop, the stages increase. Hence "--" means to stay in stage 0
 	                                            break;
 	                                        }
-                                        
+CHECKPOINT_RTL
 	                                        //reset event flag
 	                                        s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
 	                                        frontier_attribute_->queue_length = data_slice->in_length[iteration%2][peer_];
 	                                        data_slice->in_length[iteration%2][peer_]=0;
+											CHECKPOINT_RTT
 	                                        if (frontier_attribute_->queue_length ==0)  //check if actually data is in the input queue
 	                                        {
+												CHECKPOINT_RTT
 	                                            stages[peer__]=3;
 	                                            break;
 	                                        }
-                                        
+CHECKPOINT_RTL
 	                                        offset = 0;
 	                                        //
 	                                        //copy data to the expand_incoming_array from
@@ -1283,6 +1451,7 @@ namespace app {
 	                                        //    vertex_associate_orgs
 	                                        //    value__associate_orgs
 	                                        //
+											CHECKPOINT_RTT
 	                                        memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
 	                                               data_slice -> vertex_associate_ins[iteration%2][peer_].GetPointer(util::HOST),
 	                                               sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES);
@@ -1299,16 +1468,19 @@ namespace app {
 	                                               data_slice -> value__associate_orgs.GetPointer(util::HOST),
 	                                               sizeof(Value*   ) * NUM_VALUE__ASSOCIATES);
 	                                        offset += sizeof(Value*   ) * NUM_VALUE__ASSOCIATES ;
+											CHECKPOINT_RTT
 	                                    }
+										CHECKPOINT_RTT
 	                                    //copy from host to GPU
 	                                    data_slice->expand_incoming_array[peer_].Move(util::HOST, util::DEVICE, offset, 0, streams[peer_]);
-                                    
+CHECKPOINT_RTL
 	                                    grid_size = frontier_attribute_->queue_length/256+1;
 	                                    if (grid_size>512) grid_size=512;
-                                    
+CHECKPOINT_RTL
 	                                    //wait until copy to GPU is completed
 	                                    cudaStreamWaitEvent(streams[peer_],
 	                                                        s_data_slice[peer]->events[iteration_][gpu_][0], 0);
+CHECKPOINT_RTL
 	                                    //unpack data
 	                                    Iteration::template Expand_Incoming<NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
 	                                                                                                                       grid_size, 256,
@@ -1322,17 +1494,24 @@ namespace app {
 	                                                                                                                       data_slice);
 	                                    frontier_attribute_->selector^=1;
 	                                    frontier_attribute_->queue_index++;
+										CHECKPOINT_RTT
 	                                    //process subqueue if that is needed
 	                                    if (!Iteration::HAS_SUBQ) {
+											CHECKPOINT_RTT
+										if(problem->mpi_topology->rank_of_gpu[peer] == problem->mpi_topology->rank_of_gpu[gpu])
+										{
 	                                        Set_Record(data_slice, iteration, peer_, 2, streams[peer__]);
+										}
 	                                        stages[peer__]=2;
 	                                    }
+CHECKPOINT_RTT
 	                                }
 	                                else
 	                                {
-										
-	                                    if(problem->mpi_topology->rank_of_gpu[peer_] != problem->mpi_topology->rank_of_gpu[gpu])  //if data has to be sent via MPI to another node
+CHECKPOINT_RTL
+	                                    if(problem->mpi_topology->rank_of_gpu[original_peer] != problem->mpi_topology->rank_of_gpu[gpu])  //if data has to be sent via MPI to another node
 	                                    {
+											CHECKPOINT_RTT
 	                                        //MPI_PUSH_NEIGHBOR
 	                                        MPI_PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
@@ -1344,22 +1523,25 @@ namespace app {
 	                                        NUM_VERTEX_ASSOCIATES,
 	                                        NUM_VALUE__ASSOCIATES
 	                                        > (gpu,
-	                                           peer_,
+	                                           peer,
+											   original_peer,
 	                                           iteration,
-	                                           problem->mpi_topology->rank_of_gpu[peer_],
+	                                           problem->mpi_topology->rank_of_gpu[peer],
 	                                           data_slice->out_length[peer_],
 	                                           enactor_stats_,
-	                                           s_data_slice  [gpu] .GetPointer(util::HOST),
+	                                           s_data_slice  [local_gpu] .GetPointer(util::HOST),
 	                                           s_data_slice  [peer].GetPointer(util::HOST),
-	                                           s_graph_slice [gpu],
+	                                           s_graph_slice [local_gpu],
 	                                           s_graph_slice [peer],
 	                                           sent_requests,
+											   sent_request_size,
 	                                           mpi_ring_buffer->mpi_vertex_type,
 	                                           mpi_ring_buffer->mpi_value__type
 	                                           );
 	                                    }
 	                                    else //copy data on same node
 	                                    {
+											CHECKPOINT_RTT
 	                                        PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
 	                                        SizeT,
@@ -1384,11 +1566,12 @@ namespace app {
 	                                        // the following line means set s_data_slice[gpu]->set_event[iteration%4][peer_][0]=true
 	                                        Set_Record(data_slice, iteration, peer_, stages[peer__], streams[peer__]);
 	                                    }
+										CHECKPOINT_RTT
 	                                    stages[peer__]=3;
 	                                }
-                                
+CHECKPOINT_RTL
 	                                break;
-	#else
+#else
 	                                if (peer_==0) {
 	                                    if (peer__==num_gpu_global || frontier_attribute_->queue_length==0)
 	                                    {
@@ -1403,7 +1586,7 @@ namespace app {
 	                                    stages[peer__]=3;
 	                                    break;
 	                                }
-                                
+
 	                                if (peer__<num_gpu_global) //incoming data
 	                                { //wait and expand incoming
 	                                    if (!(s_data_slice[peer]->events_set[iteration_][gpu_][0])) //check if event happened
@@ -1412,14 +1595,14 @@ namespace app {
 	                                        stages[peer__]--;        //at the end ofthe loop, the stages increase. Hence "--" means to stay in stage 0
 	                                        break;
 	                                    }
-                                    
+
 	                                    //reset event flag
 	                                    s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
 	                                    frontier_attribute_->queue_length = data_slice->in_length[iteration%2][peer_];
 	                                    data_slice->in_length[iteration%2][peer_]=0;
 	                                    if (frontier_attribute_->queue_length ==0)  //check if actually data is in the input queue
 	                                    {   stages[peer__]=3;break;}
-                                    
+
 	                                    offset = 0;
 	                                    //copy 1 element of data to the expand_incoming_array from
 	                                    //    vertex_associate_ins[iteration%2][peer_]
@@ -1443,13 +1626,13 @@ namespace app {
 	                                           data_slice -> value__associate_orgs.GetPointer(util::HOST),
 	                                           sizeof(Value*   ) * NUM_VALUE__ASSOCIATES);
 	                                    offset += sizeof(Value*   ) * NUM_VALUE__ASSOCIATES ;
-                                    
+
 	                                    //copy from host to GPU
 	                                    data_slice->expand_incoming_array[peer_].Move(util::HOST, util::DEVICE, offset, 0, streams[peer_]);
-                                    
+
 	                                    grid_size = frontier_attribute_->queue_length/256+1;
 	                                    if (grid_size>512) grid_size=512;
-                                    
+
 	                                    //wait until copy to GPU is completed
 	                                    cudaStreamWaitEvent(streams[peer_],
 	                                                        s_data_slice[peer]->events[iteration_][gpu_][0], 0);
@@ -1492,8 +1675,8 @@ namespace app {
 	                                    stages[peer__]=3;
 	                                }
 	                                break;
-	#endif
-                                
+#endif
+
 	                            case 1: //Compute Output Length
 	                                if (enactor_stats_->retval = Iteration::Compute_OutputLength(
 	                                                                                             frontier_attribute_,
@@ -1506,14 +1689,14 @@ namespace app {
 	                                                                                             context          [peer_][0],
 	                                                                                             streams          [peer_],
 	                                                                                             gunrock::oprtr::advance::V2V, true)) break;
-                                
+
 	                                frontier_attribute_->output_length.Move(util::DEVICE, util::HOST,1,0,streams[peer_]);
 	                                if (Enactor::SIZE_CHECK)
 	                                {
 	                                    Set_Record(data_slice, iteration, peer_, stages[peer_], streams[peer_]);
 	                                }
 	                                break;
-                                
+
 	                            case 2: //SubQueue Core
 	                                //in case there needs to be some preprocessing on the individuals sub-queues before the queues are merged into a new frontier
 	                                if (Enactor::SIZE_CHECK)
@@ -1545,8 +1728,8 @@ namespace app {
 	                                                         &(work_progress[peer_]),
 	                                                         context[peer_],
 	                                                         streams[peer_]);
-                                
-                                
+
+
 	                                if (enactor_stats_->retval = work_progress[peer_].GetQueueLength(
 	                                                                                                 frontier_attribute_->queue_index,
 	                                                                                                 frontier_attribute_->queue_length,
@@ -1556,7 +1739,7 @@ namespace app {
 	                                if (num_gpu_global>1)
 	                                    Set_Record(data_slice, iteration, peer_, stages[peer_], streams[peer_]);  //set the flag that the data has been processed
 	                                break;
-                                
+
 	                            case 3: //Copy the subqueues to one common place
 	                                if (num_gpu_global <=1)
 	                                {
@@ -1570,7 +1753,7 @@ namespace app {
 	                                                                               stages[peer_]-1, stages[peer_], to_show[peer_])) break;
 	                                    if (to_show[peer_] == false) break;
 	                                }
-                                
+CHECKPOINT_RTL
 	                                if (!Enactor::SIZE_CHECK)      //if size check is disabled
 	                                {
 	                                    if (Iteration::HAS_SUBQ)
@@ -1579,15 +1762,15 @@ namespace app {
 	                                            Check_Size<false, SizeT, VertexId> ("queue3", frontier_attribute_->output_length[0]+2, &frontier_queue_->keys  [selector^1], over_sized, gpu, iteration, peer_, false)) break;
 	                                    }
 	                                    if (frontier_attribute_->queue_length ==0) break;
-                                    
+
 	                                    if (enactor_stats_->retval =
 	                                        Check_Size<false, SizeT, VertexId> ("total_queue", Total_Length + frontier_attribute_->queue_length, &data_slice->frontier_queues[num_gpu_global].keys[0], over_sized, gpu, iteration, peer_, false)) break;
-                                    
+
 	                                    //launch copy kernel to copy a subqueue from frontier queue associated with peer_ (a.k.a. frontier_queue_) to one common place, the end of the data in frontier_queues[num_gpus_global]
 	                                    //  frontier_queue_->keys[selector].GetPointer(util::DEVICE)
 	                                    //     to
 	                                    //  data_slice->frontier_queues[num_gpus_global].keys[0].GetPointer(util::DEVICE) + Total_Length
-                                    
+
 	                                    util::MemsetCopyVectorKernel<<<256,256, 0, streams[peer_]>>>(
 	                                                                                                 data_slice->frontier_queues[num_gpu_global].keys[0].GetPointer(util::DEVICE) + Total_Length,
 	                                                                                                 frontier_queue_->keys[selector].GetPointer(util::DEVICE),
@@ -1598,10 +1781,10 @@ namespace app {
 	                                                                                                   frontier_queue_->values[selector].GetPointer(util::DEVICE),
 	                                                                                                   frontier_attribute_->queue_length);
 	                                }
-                                
+
 	                                Total_Length += frontier_attribute_->queue_length; //update the total length, used as offset for the new copy position
 	                                break;
-                                
+
 	                            case 4: //End
 	                                data_slice->wait_counter++;
 	                                to_show[peer__]=false;
@@ -1610,7 +1793,7 @@ namespace app {
 	                                stages[peer__]--;
 	                                to_show[peer__]=false;
 	                        }
-                        
+CHECKPOINT_RTL
 	                        if (Enactor::DEBUG && !enactor_stats_->retval)
 	                        {
 	                            mssg="stage 0 @ gpu 0, peer_ 0 failed";
@@ -1621,33 +1804,41 @@ namespace app {
 	                        }
 	                        stages[peer__]++;
 	                        if (enactor_stats_->retval) break;
+CHECKPOINT_RTL
 	                    }
 	                }
-	#ifdef WITHMPI
-	            if (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem->mpi_topology))
-	#else
+#ifdef WITHMPI
+	            if (!mpi_ring_buffer->all_done)
+#else
 	                if (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
-	#endif
+#endif
 	                {
 	                    for (peer_=0;peer_<num_gpu_global*2;peer_++)
 	                        data_slice->wait_marker[peer_]=0;
 	                    wait_count=0;
-	#ifdef WITHMPI
-	                    while (wait_count<num_gpu_global*2-1 &&
-	                           !Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem->mpi_topology))
-	#else
+#ifdef WITHMPI
+	                    while (wait_count<num_gpu_global*2-1 && !mpi_ring_buffer->all_done)
+	                           //!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem->mpi_topology))
+
+#else
 	                        while (wait_count<num_gpu_global*2-1 &&
 	                               !Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
-	#endif
+#endif
 	                        {
 	                            for (peer_=0;peer_<num_gpu_global*2;peer_++)
 	                            {
+printf("data_slice->wait_marker[%d,%d,%d,%d]\n",data_slice->wait_marker[0],data_slice->wait_marker[1],data_slice->wait_marker[2],data_slice->wait_marker[3]);fflush(stdout);
 	                                if (peer_==num_gpu_global || data_slice->wait_marker[peer_]!=0)  //peer_==num_gpus (channel to itself, i.e. not needed)
 	                                    continue;
-	#ifdef WITHMPI
-	                                if((problem->mpi_topology->rank_of_gpu[peer_] != problem->mpi_topology->rank_of_gpu[gpu]))                  //check if MPI communication
+#ifdef WITHMPI
+									original_peer       = (peer_%num_gpu_global) <= gpu ? peer_%num_gpu_global-1 : peer_%num_gpu_global;
+	                                if(peer_!=0 && (problem->mpi_topology->rank_of_gpu[original_peer] != problem->mpi_topology->rank_of_gpu[gpu]))                  //check if MPI communication
 	                                {
-	                                    if (MPI_Communication_Check(sent_requests, peer_, num_gpu_global,1+NUM_VERTEX_ASSOCIATES+NUM_VALUE__ASSOCIATES))   //check if MPI_Sent or receive for peer_ is completed
+										if(peer_<num_gpu_global){
+											wait_count++;
+											continue;  //MPI receive is done in MPI_Comm_Loop, no Communication Check necessary
+										}
+	                                    if (MPI_Communication_Check(sent_requests, sent_request_size, gpu, original_peer, num_gpu_global))   //check if MPI_Sent or receive for peer_ is completed
 	                                    {
 	                                        data_slice->wait_marker[peer_]=1;
 	                                        wait_count++;
@@ -1661,6 +1852,7 @@ namespace app {
 	                                    {
 	                                        data_slice->wait_marker[peer_]=1;
 	                                        wait_count++;
+
 	                                        continue;
 	                                    } else if (tretval != cudaErrorNotReady)
 	                                    {
@@ -1668,8 +1860,7 @@ namespace app {
 	                                        break;
 	                                    }
 	                                }
-                                
-	#else
+#else
 	                                tretval = cudaStreamQuery(streams[peer_]);                 //check if all operations in stream for peer_ are completed
 	                                if (tretval == cudaSuccess)
 	                                {
@@ -1681,14 +1872,16 @@ namespace app {
 	                                    enactor_stats[peer_%num_gpu_global].retval = tretval;
 	                                    break;
 	                                }
-	#endif
+#endif
 	                            }
 	                        }
-                    
+CHECKPOINT_RTL
+printf("final data_slice->wait_marker[%d,%d,%d,%d]\n",data_slice->wait_marker[0],data_slice->wait_marker[1],data_slice->wait_marker[2],data_slice->wait_marker[3]);fflush(stdout);
+
 	                    if (Enactor::DEBUG) {printf("%d\t %lld\t \t Subqueue finished. Total_Length= %d\n", gpu, enactor_stats[0].iteration, Total_Length);fflush(stdout);}
 	                    grid_size = Total_Length/256+1;
 	                    if (grid_size > 512) grid_size = 512;
-                    
+
 	                    if (Enactor::SIZE_CHECK)
 	                    {
 	                        if (enactor_stats[0]. retval =
@@ -1696,7 +1889,7 @@ namespace app {
 	                        if (Problem::USE_DOUBLE_BUFFER)
 	                            if (enactor_stats[0].retval =
 	                                Check_Size<true, SizeT, Value> ("total_queue", Total_Length, &data_slice->frontier_queues[0].values[frontier_attribute[0].selector], over_sized, gpu, iteration, num_gpu_global, true)) break;
-                        
+
 	                        offset=frontier_attribute[0].queue_length;
 	                        //copy queues together to position
 	                        // data_slice->frontier_queues[0]
@@ -1714,6 +1907,8 @@ namespace app {
 	                                offset+=frontier_attribute[peer_].queue_length;
 	                            }
 	                    }
+
+CHECKPOINT_RTL
 	                    frontier_attribute[0].queue_length = Total_Length;
 	                    if (!Enactor::SIZE_CHECK) frontier_attribute[0].selector = 0;
 	                    //select frontier queue position
@@ -1732,9 +1927,9 @@ namespace app {
 	                        frontier_attribute_->queue_offset = 0;
 	                        frontier_attribute_->queue_reset  = true;
 	                        if (!Enactor::SIZE_CHECK) frontier_attribute_->selector     = 0;
-                        
+
 	                        Iteration::FullQueue_Gather(
-	                                                    gpu,
+	                                                    local_gpu,
 	                                                    peer_,
 	                                                    frontier_queue_,
 	                                                    scanned_edges_,
@@ -1748,13 +1943,13 @@ namespace app {
 	                                                    streams[peer_]);
 	                        selector            = frontier_attribute[peer_].selector;
 	                        if (enactor_stats_->retval) break;
-                        
+
 	                        if (frontier_attribute_->queue_length !=0)
 	                        {
 	                            if (Enactor::DEBUG) {
 	                                mssg = "";
 	                                ShowDebugInfo<Problem>(
-	                                                       gpu,
+	                                                       local_gpu,
 	                                                       peer_,
 	                                                       frontier_attribute_,
 	                                                       enactor_stats_,
@@ -1764,7 +1959,8 @@ namespace app {
 	                                                       mssg,
 	                                                       streams[peer_]);
 	                            }
-                            
+printf("test %s,%d: frontier_attribute->queue_length = %d\n",__FILE__,__LINE__,(SizeT)frontier_attribute_->queue_length);
+CHECKPOINT_RTL
 	                            enactor_stats_->retval = Iteration::Compute_OutputLength(
 	                                                                                     frontier_attribute_,
 	                                                                                     graph_slice    ->row_offsets     .GetPointer(util::DEVICE),
@@ -1777,43 +1973,52 @@ namespace app {
 	                                                                                     streams          [peer_],
 	                                                                                     gunrock::oprtr::advance::V2V, true);
 	                            if (enactor_stats_->retval) break;
-                            
+printf("test %s,%d: frontier_attribute->queue_length = %d\n",__FILE__,__LINE__,(SizeT)frontier_attribute_->queue_length);
 	                            frontier_attribute_->output_length.Move(util::DEVICE, util::HOST, 1, 0, streams[peer_]);
+CHECKPOINT_RTL
+printf("test %s,%d: frontier_attribute->queue_length = %d\n",__FILE__,__LINE__,(SizeT)frontier_attribute_->queue_length);
 	                            if (Enactor::SIZE_CHECK)
 	                            {
 	                                tretval = cudaStreamSynchronize(streams[peer_]);
 	                                if (tretval != cudaSuccess) {enactor_stats_->retval=tretval;break;}
-                                
+CHECKPOINT_RTL
 	                                Iteration::Check_Queue_Size(
-	                                                            gpu,
+	                                                            local_gpu,
 	                                                            peer_,
 	                                                            frontier_attribute_->output_length[0] + 2,
 	                                                            frontier_queue_,
 	                                                            frontier_attribute_,
 	                                                            enactor_stats_,
 	                                                            graph_slice);
-                                
+
 	                            }
-                            
+
+CHECKPOINT_RTL
+printf("test %s,%d: frontier_attribute->queue_length = %d\n",__FILE__,__LINE__,(SizeT)frontier_attribute_->queue_length);
+CHECKPOINT_RTL2
 	                            Iteration::FullQueue_Core(
-	                                                      gpu,
+	                                                      local_gpu,
 	                                                      peer_,
 	                                                      frontier_queue_,
 	                                                      scanned_edges_,
 	                                                      frontier_attribute_,
 	                                                      enactor_stats_,
 	                                                      data_slice,
-	                                                      s_data_slice[gpu].GetPointer(util::DEVICE),
+	                                                      s_data_slice[local_gpu].GetPointer(util::DEVICE),
 	                                                      graph_slice,
 	                                                      work_progress_,
 	                                                      context[peer_],
 	                                                      streams[peer_]);
+CHECKPOINT_RTL2
 	                            if (enactor_stats_->retval) break;
+CHECKPOINT_RTL
 	                            if (!Enactor::SIZE_CHECK)
 	                            {
 	                                if (enactor_stats_->retval =
-	                                    Check_Size<false, SizeT, VertexId> ("queue3", frontier_attribute->output_length[0]+2, &frontier_queue_->keys[selector^1], over_sized, gpu, iteration, peer_, false)) break;
+	                                    Check_Size<false, SizeT, VertexId> ("queue3", frontier_attribute->output_length[0]+2, &frontier_queue_->keys[selector^1], over_sized, local_gpu, iteration, peer_, false)) break;
 	                            }
+
+CHECKPOINT_RTL
 	                            selector = frontier_attribute[peer_].selector;
 	                            Total_Length = frontier_attribute[peer_].queue_length;
 	                        } else {
@@ -1825,7 +2030,8 @@ namespace app {
 	                        frontier_queue_ = &(data_slice->frontier_queues[Enactor::SIZE_CHECK?0:num_gpu_global]);
 	                        if (num_gpu_global==1) data_slice->out_length[0]=Total_Length;
 	                    }
-                    
+
+CHECKPOINT_RTL
 	                    if (num_gpu_global > 1)
 	                    {
 	                        Iteration::Iteration_Update_Preds(
@@ -1836,30 +2042,37 @@ namespace app {
 	                                                          Total_Length,
 	                                                          streams[0]);
 	                        Iteration::template Make_Output <NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
-	                                                                                                        gpu,
+	                                                                                                        local_gpu,
 	                                                                                                        Total_Length,
 	                                                                                                        num_gpu_global,
 	                                                                                                        &data_slice->frontier_queues[Enactor::SIZE_CHECK?0:num_gpu_global],
 	                                                                                                        &data_slice->scanned_edges[0],
 	                                                                                                        &frontier_attribute[0],
 	                                                                                                        enactor_stats,
-	                                                                                                        &problem->data_slices[gpu],
+	                                                                                                        &problem->data_slices[local_gpu],
 	                                                                                                        graph_slice,
 	                                                                                                        &work_progress[0],
 	                                                                                                        context[0],
 	                                                                                                        streams[0]);
 	                    } else data_slice->out_length[0]= Total_Length;
-                    
+
 	                    for (peer_=0;peer_<num_gpu_global;peer_++)
 	                        frontier_attribute[peer_].queue_length = data_slice->out_length[peer_];
 	                }
 	            Iteration::Iteration_Change(enactor_stats->iteration);
 	        }
 #ifdef WITHMPI
+
+CHECKPOINT_RTL
 		    for(int i=0;i<num_gpu_global; i++)
 		    {
+				for(int p=0;p<num_gpu_global; p++){
+					free(sent_requests[i][p]);
+				}
+				free(sent_request_size[i]);
 		        free(sent_requests[i]);
 		    }
+			free(sent_request_size);
 			free(sent_requests);
 #endif
 	}
@@ -1869,7 +2082,7 @@ namespace app {
 
 	std::vector<std::string> tokenize(std::string str){
 	    std::stringstream strstr(str);
-    
+
 	    // use stream iterators to copy the stream to the vector as whitespace separated strings
 	    std::istream_iterator<std::string> it(strstr);
 	    std::istream_iterator<std::string> end;
@@ -1898,10 +2111,13 @@ namespace app {
 	 * \return GPU_Topology
 	 *
 	 * struct GPU_Topology
-	 *	int num_servers                    ;   // the number of involved servers
-	 *	int *num_gpus_per_server           ;   // how many GPUs are used in each server
-	 *	int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
-	 *	int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+		int num_servers                    ;   // the number of involved servers
+		int *num_gpus_per_server           ;   // how many GPUs are used in each server
+		int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
+		int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+		int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
+		int total_num_gpus                 ;   // the total number of GPUs
+		int local_rank                     ;   // the local MPI rank
 	 *
 	 */
 	struct gunrock::app::GPU_Topology read_mpi_topology_config_file(const char * filename)
@@ -1924,7 +2140,7 @@ namespace app {
 	                {
 	                    gpu_mapping.resize(target_server+1);
 	                }
-                
+
 	                for(size_t i=0;i<token.size()-2;i++)
 	                {
 	                    int gpu_nr = atoi(token[i+2].c_str());
@@ -1939,9 +2155,9 @@ namespace app {
 	        fprintf(stderr,"unable to open mpi topology configuation file %s\n",filename);
 	        exit(-1);
 	    }
-    
+
 	    conf_file.close();
-    
+
 	    struct gunrock::app::GPU_Topology topol;
 	    topol.num_servers = (int)gpu_mapping.size();
 	    topol.num_gpus_per_server = (int  *)malloc(sizeof(int)*topol.num_servers);
@@ -1955,7 +2171,7 @@ namespace app {
 	        topol.num_gpus_per_server[i] = (int)gpu_mapping[i].size();
 	        topol.local_gpu_mapping[i]   = (int*)malloc(sizeof(int) * topol.num_gpus_per_server[i]);
 	        topol.global_gpu_maping[i]   = (int*)malloc(sizeof(int) * topol.num_gpus_per_server[i]);
-        
+
 	        for(int j=0; j<topol.num_gpus_per_server[i]; j++)
 	        {
 	            topol.rank_of_gpu[offset]=i;
@@ -1979,10 +2195,10 @@ namespace app {
 	    MPI_Aint offsets[1];
 	    offsets[0]= offsetof(type_mpi_struct<Type>,v);
 	    MPI_Datatype types[1] = {MPI_BYTE};
-    
+
 	    MPI_Type_create_struct(1, lengths, offsets, types, t);
 	    MPI_Type_commit(t);
-		
+
 	}
 
 	#endif
@@ -1990,7 +2206,7 @@ namespace app {
 
 	/*
 	 * @brief Base class for graph problem enactors.
- 
+
 	 */
 	template <
 	typename SizeT,
@@ -2006,21 +2222,21 @@ namespace app {
 	    int           num_gpus_local;
 	    int           num_gpus_global;
 	    int           *gpu_idx_local;
-    
+
 	    FrontierType  frontier_type;
-    
+
 	    //Device properties
 	    util::Array1D<SizeT, util::CudaProperties>          cuda_props        ;
-    
+
 	    // Queue size counters and accompanying functionality
 	    util::Array1D<SizeT, util::CtaWorkProgressLifetime> work_progress     ;
 	    util::Array1D<SizeT, EnactorStats>                  enactor_stats     ;
 	    util::Array1D<SizeT, FrontierAttribute<SizeT> >     frontier_attribute;
-    
+
 	    FrontierType GetFrontierType() {return frontier_type;}
-    
+
 	protected:
-    
+
 	    /*
 	     * @brief Constructor
 	     *
@@ -2045,7 +2261,7 @@ namespace app {
 	        work_progress     .Init(num_gpus*num_gpus, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
 	        enactor_stats     .Init(num_gpus*num_gpus, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
 	        frontier_attribute.Init(num_gpus*num_gpus, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
-        
+
 	        for (int gpu=0;gpu<num_gpus;gpu++)
 	        {
 	            if (util::SetDevice(gpu_idx[gpu])) return;
@@ -2059,7 +2275,7 @@ namespace app {
 	            }
 	        }
 	    }
-    
+
 	#ifdef WITHMPI
 	    /*
 	     * @brief Constructor
@@ -2071,17 +2287,18 @@ namespace app {
 	                FrontierType  frontier_type,
 	                int           num_gpus_global,
 	                int          *gpu_idx_local,
-	                int 			 num_gpu_local
+	                int 		  num_gpu_local
 	                )
 	    {
 	        /* num_gpu is ambiguous for mulit-node-multi-gpu since it can either mean total number or local node gpus number.
 	         * due to this ambiguity it should not be used.
 	         */
 	        this->gpu_idx=NULL;
-        
+			this->num_gpus=-1;
 	        this->frontier_type        = frontier_type;
 	        this->num_gpus_global      = num_gpus_global;
 	        this->gpu_idx_local        = gpu_idx_local;
+			this->num_gpus_local       = num_gpu_local;
 	        cuda_props        .SetName("cuda_props"        );
 	        work_progress     .SetName("work_progress"     );
 	        enactor_stats     .SetName("enactor_stats"     );
@@ -2090,7 +2307,7 @@ namespace app {
 	        work_progress     .Init(num_gpu_local*num_gpus_global, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
 	        enactor_stats     .Init(num_gpu_local*num_gpus_global, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
 	        frontier_attribute.Init(num_gpu_local*num_gpus_global, util::HOST, true, cudaHostAllocMapped | cudaHostAllocPortable);
-        
+
 	        for (int gpu=0; gpu<num_gpu_local; gpu++)
 	        {
 	            if (util::SetDevice(gpu_idx_local[gpu])) return;
@@ -2104,11 +2321,11 @@ namespace app {
 	            }
 	        }
 	    }
-    
+
 	#endif
-    
-    
-    
+
+
+
 	    /*
 	     * @brief Destructor
 	     */
@@ -2131,7 +2348,7 @@ namespace app {
 	        enactor_stats     .Release();
 	        frontier_attribute.Release();
 	    }
-    
+
 	    /*
 	     * @brief Init function for enactor base class
 	     *
@@ -2153,18 +2370,23 @@ namespace app {
 	                     int node_lock_size = 256)
 	    {
 	        cudaError_t retval = cudaSuccess;
-        
-        
+
+
 	        for (int gpu=0; gpu<num_gpus_local ;gpu++)
 	        {
+
+#ifdef WITHMPI
+				if (retval = util::SetDevice(gpu_idx_local[gpu])) return retval;
+#else
 	            if (retval = util::SetDevice(gpu_idx[gpu])) return retval;
+#endif
 	            for (int peer=0; peer<num_gpus_global ;peer++)
 	            {
 	                EnactorStats *enactor_stats_ = enactor_stats + gpu*num_gpus_global + peer;
 	                //initialize runtime stats
 	                enactor_stats_ -> advance_grid_size = MaxGridSize(gpu, advance_occupancy, max_grid_size);
 	                enactor_stats_ -> filter_grid_size  = MaxGridSize(gpu, filter_occupancy, max_grid_size);
-                
+
 	                if (retval = enactor_stats_ -> advance_kernel_stats.Setup(enactor_stats_->advance_grid_size)) return retval;
 	                if (retval = enactor_stats_ ->  filter_kernel_stats.Setup(enactor_stats_->filter_grid_size)) return retval;
 	                if (retval = enactor_stats_ -> node_locks    .Allocate(node_lock_size, util::DEVICE)) return retval;
@@ -2172,16 +2394,21 @@ namespace app {
 	                if (retval = enactor_stats_ -> total_queued  .Allocate(1, util::DEVICE | util::HOST)) return retval;
 	            }
 	        }
+
 	        return retval;
 	    }
-    
+
 	    cudaError_t Reset()
 	    {
 	        cudaError_t retval = cudaSuccess;
-        
+
 	        for (int gpu=0; gpu<num_gpus_local; gpu++)
 	        {
+#ifdef WITHMPI
+	            if (retval = util::SetDevice(gpu_idx_local[gpu])) return retval;
+#else
 	            if (retval = util::SetDevice(gpu_idx[gpu])) return retval;
+#endif
 	            for (int peer=0; peer<num_gpus_global; peer++)
 	            {
 	                EnactorStats *enactor_stats_ = enactor_stats + gpu*num_gpus_global + peer;
@@ -2192,9 +2419,10 @@ namespace app {
 	                enactor_stats_ -> total_queued.Move(util::HOST, util::DEVICE);
 	            }
 	        }
+
 	        return retval;
 	    }
-    
+
 	    template <typename Problem>
 	    cudaError_t Setup(
 	                      Problem *problem,
@@ -2204,12 +2432,12 @@ namespace app {
 	                      int node_lock_size = 256)
 	    {
 	        cudaError_t retval = cudaSuccess;
-        
+
 	        if (retval = Init(problem, max_grid_size, advance_occupancy, filter_occupancy, node_lock_size)) return retval;
 	        if (retval = Reset()) return retval;
 	        return retval;
 	    }
-    
+
 	    /*
 	     * @brief Utility function for getting the max grid size.
 	     *
@@ -2223,7 +2451,7 @@ namespace app {
 	        if (max_grid_size <= 0) {
 	            max_grid_size = this->cuda_props[gpu].device_props.multiProcessorCount * cta_occupancy;
 	        }
-        
+
 	        return max_grid_size;
 	    }
 	};
@@ -2254,7 +2482,7 @@ namespace app {
 	    static const bool BACKWARD   = _BACKWARD;
 	    static const bool FORWARD    = _FORWARD;
 	    static const bool UPDATE_PREDECESSORS = _UPDATE_PREDECESSORS;
-    
+
 	    static void SubQueue_Gather(
 	                                int                            thread_num,
 	                                int                            peer_,
@@ -2271,7 +2499,7 @@ namespace app {
 	                                cudaStream_t                   stream)
 	    {
 	    }
-    
+
 	    static void SubQueue_Core(
 	                              int                            thread_num,
 	                              int                            peer_,
@@ -2288,7 +2516,7 @@ namespace app {
 	                              cudaStream_t                   stream)
 	    {
 	    }
-    
+
 	    static void FullQueue_Gather(
 	                                 int                            thread_num,
 	                                 int                            peer_,
@@ -2305,7 +2533,7 @@ namespace app {
 	                                 cudaStream_t                   stream)
 	    {
 	    }
-    
+
 	    static void FullQueue_Core(
 	                               int                            thread_num,
 	                               int                            peer_,
@@ -2322,7 +2550,7 @@ namespace app {
 	                               cudaStream_t                   stream)
 	    {
 	    }
-    
+
 	    static bool Stop_Condition(
 	                               EnactorStats                  *enactor_stats,
 	                               FrontierAttribute<SizeT>      *frontier_attribute,
@@ -2334,12 +2562,12 @@ namespace app {
 	    {
 	        return All_Done(enactor_stats, frontier_attribute, data_slice, num_gpus_local, num_gpus_global);
 	    }
-    
+
 	    static void Iteration_Change(long long &iterations)
 	    {
 	        iterations++;
 	    }
-    
+
 	    static void Iteration_Update_Preds(
 	                                       GraphSlice                    *graph_slice,
 	                                       DataSlice                     *data_slice,
@@ -2355,7 +2583,7 @@ namespace app {
 	        int grid_size   = num_elements / 256;
 	        if ((num_elements % 256) !=0) grid_size++;
 	        if (grid_size > 512) grid_size = 512;
-        
+
 	        if (Problem::MARK_PREDECESSORS && UPDATE_PREDECESSORS && num_elements>0 )
 	        {
 	            Copy_Preds<VertexId, SizeT> <<<grid_size,256,0, stream>>>(
@@ -2363,7 +2591,7 @@ namespace app {
 	                                                                      frontier_queue->keys[selector].GetPointer(util::DEVICE),
 	                                                                      data_slice    ->preds         .GetPointer(util::DEVICE),
 	                                                                      data_slice    ->temp_preds    .GetPointer(util::DEVICE));
-            
+
 	            Update_Preds<VertexId,SizeT> <<<grid_size,256,0,stream>>>(
 	                                                                      num_elements,
 	                                                                      graph_slice   ->nodes,
@@ -2373,7 +2601,7 @@ namespace app {
 	                                                                      data_slice    ->preds          .GetPointer(util::DEVICE));//,
 	        }
 	    }
-    
+
 	    static void Check_Queue_Size(
 	                                 int                            thread_num,
 	                                 int                            peer_,
@@ -2387,13 +2615,13 @@ namespace app {
 	        bool over_sized = false;
 	        int  selector   = frontier_attribute->selector;
 	        int  iteration  = enactor_stats -> iteration;
-        
+
 	        if (Enactor::DEBUG)
 	            printf("%d\t %d\t %d\t queue_length = %d, output_length = %d\n",
 	                   thread_num, iteration, peer_,
 	                   frontier_queue->keys[selector^1].GetSize(),
 	                   request_length);fflush(stdout);
-        
+
 	        if (enactor_stats->retval =
 	            Check_Size<true, SizeT, VertexId > ("queue3", request_length, &frontier_queue->keys  [selector^1], over_sized, thread_num, iteration, peer_, false)) return;
 	        if (enactor_stats->retval =
@@ -2406,7 +2634,7 @@ namespace app {
 	                Check_Size<true, SizeT, Value> ("queue3", request_length, &frontier_queue->values[selector  ], over_sized, thread_num, iteration, peer_, true )) return;
 	        }
 	    }
-    
+
 	    template <
 	    int NUM_VERTEX_ASSOCIATES,
 	    int NUM_VALUE__ASSOCIATES>
@@ -2437,14 +2665,14 @@ namespace app {
 	        if ((num_elements % block_size)!=0) grid_size ++;
 	        if (grid_size > 512) grid_size=512;
 	        DataSlice* data_slice=data_slice_->GetPointer(util::HOST);
-        
+
 	        for (peer_ = 0; peer_<num_gpus; peer_++)
 	        {
 	            t_out_length[peer_] = 0;
 	            data_slice->out_length[peer_] = 0;
 	        }
 	        if (num_elements ==0) return;
-        
+
 	        over_sized = false;
 	        for (peer_ = 0; peer_<num_gpus; peer_++)
 	        {
@@ -2454,12 +2682,12 @@ namespace app {
 	        }
 	        if (enactor_stats->retval) return;
 	        if (over_sized) data_slice->keys_markers.Move(util::HOST, util::DEVICE, num_gpus, 0, stream);
-        
+
 	        for (t=0; t<2; t++)
 	        {
 	            if (t==0 && !FORWARD) continue;
 	            if (t==1 && !BACKWARD) continue;
-            
+
 	            if (BACKWARD && t==1)
 	                Assign_Marker_Backward<VertexId, SizeT>
 	                <<<grid_size, block_size, num_gpus * sizeof(SizeT*) ,stream>>> (
@@ -2477,7 +2705,7 @@ namespace app {
 	                                                                                frontier_queue->keys[selector]    .GetPointer(util::DEVICE),
 	                                                                                graph_slice   ->partition_table   .GetPointer(util::DEVICE),
 	                                                                                data_slice    ->keys_markers      .GetPointer(util::DEVICE));
-            
+
 	            for (peer_=0;peer_<num_gpus;peer_++)
 	            {
 	                Scan<mgpu::MgpuScanTypeInc>(
@@ -2487,7 +2715,7 @@ namespace app {
 	                                            (SizeT*)data_slice->keys_marker[peer_].GetPointer(util::DEVICE),
 	                                            context[0]);
 	            }
-            
+
 	            if (num_elements>0) for (peer_=0; peer_<num_gpus;peer_++)
 	            {
 	                cudaMemcpyAsync(&(t_out_length[peer_]),
@@ -2499,7 +2727,7 @@ namespace app {
 	                    t_out_length[peer_]=0;
 	            }
 	            if (enactor_stats->retval = cudaStreamSynchronize(stream)) break;
-            
+
 	            keys_over_sized = true;
 	            for (peer_=0; peer_<num_gpus;peer_++)
 	            {
@@ -2516,7 +2744,7 @@ namespace app {
 	                    data_slice->frontier_queues[0].keys[selector^1].GetPointer(util::DEVICE) :
 	                    data_slice->keys_out[peer_].GetPointer(util::DEVICE);
 	                if (peer_ == 0) continue;
-                
+
 	                over_sized = false;
 	                for (i=0;i<NUM_VERTEX_ASSOCIATES;i++)
 	                {
@@ -2531,7 +2759,7 @@ namespace app {
 	                }
 	                if (enactor_stats->retval) break;
 	                if (over_sized) data_slice->vertex_associate_outs[peer_].Move(util::HOST, util::DEVICE, NUM_VERTEX_ASSOCIATES, 0, stream);
-                
+
 	                over_sized = false;
 	                for (i=0;i<NUM_VALUE__ASSOCIATES;i++)
 	                {
@@ -2549,7 +2777,7 @@ namespace app {
 	            }
 	            if (enactor_stats->retval) break;
 	            if (keys_over_sized) data_slice->keys_outs.Move(util::HOST, util::DEVICE, num_gpus, 0, stream);
-            
+
 	            offset = 0;
 	            memcpy(&(data_slice -> make_out_array[offset]),
 	                   data_slice -> keys_markers         .GetPointer(util::HOST),
@@ -2586,7 +2814,7 @@ namespace app {
 	                   sizeof(SizeT) * num_gpus);
 	            offset += sizeof(SizeT) * num_gpus;
 	            data_slice->make_out_array.Move(util::HOST, util::DEVICE, offset, 0, stream);
-            
+
 	            if (BACKWARD && t==1)
 	                Make_Out_Backward<VertexId, SizeT, Value, NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES>
 	                <<<grid_size, block_size, sizeof(char)*offset, stream>>> (
@@ -2616,7 +2844,7 @@ namespace app {
 	        frontier_attribute->selector^=1;
 	        if (t_out_length!=NULL) {delete[] t_out_length; t_out_length=NULL;}
 	    }
-    
+
 	};
 
 } // namespace app
