@@ -35,10 +35,10 @@ namespace edge_map_partitioned {
 // binary search on device, only works for arrays shorter
 // than 1024
 
-template <int NT>
-__device__ int BinarySearch(unsigned int i, unsigned int *queue)
+template <int NT, typename ValueType, typename QueueType>
+__device__ int BinarySearch( ValueType i, QueueType *queue )
 {
-    int mid = (NT/2 - 1);
+    ValueType mid = (NT/2 - 1);
 
     if (NT > 512)
         mid = queue[mid] > i ? mid - 256 : mid + 256;

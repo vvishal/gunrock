@@ -53,7 +53,10 @@ cudaError_t ComputeOutputLength(
     // Use sorted sort to compute partition bound for each work-chunk
     // load edge-expand-partitioned kernel
     //util::DisplayDeviceResults(d_in_key_queue, frontier_attribute.queue_length);
+
     typedef typename Problem::SizeT         SizeT;
+    typedef typename Problem::Value         Value;
+
     if (frontier_attribute->queue_length ==0) 
     {
         printf("setting output_length to 0");
@@ -93,7 +96,7 @@ cudaError_t ComputeOutputLength(
     Scan<mgpu::MgpuScanTypeInc>(
         (SizeT*)partitioned_scanned_edges, 
         frontier_attribute->queue_length, // TODO: +1?
-        (Value )0, 
+        ( Value )0, 
         mgpu::plus<SizeT>(),
         (Value *)0, 
         (Value *)0, 

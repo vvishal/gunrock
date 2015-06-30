@@ -212,7 +212,7 @@ struct BFSProblem : ProblemBase<VertexId, SizeT, Value,
             {
                 if (this->preds.GetPointer(util::DEVICE)==NULL)
                     if (retval = this->preds.Allocate(nodes, util::DEVICE)) return retval;
-                util::MemsetKernel<<<128,128>>>(this->preds.GetPointer(util::DEVICE), -2, nodes); 
+                util::MemsetKernel<<<128,128>>>(this->preds.GetPointer(util::DEVICE), ( Value ) -2, nodes); 
             }
 
             if (_ENABLE_IDEMPOTENCE) {

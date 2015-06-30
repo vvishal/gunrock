@@ -61,7 +61,8 @@ struct BFSFunctor
                 new_weight = label + 1;
             }
             else new_weight = s_id +1;
-            bool result = new_weight < atomicMin( ( unsigned long long int*) problem->labels + d_id, ( unsigned long long int ) new_weight);
+            bool result = new_weight < atomicMin( ( unsigned long long int*) ( problem->labels + d_id ),
+						  ( unsigned long long int ) new_weight);
             return result;
         }
     }
