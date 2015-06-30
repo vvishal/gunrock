@@ -43,6 +43,11 @@ using namespace gunrock::oprtr;
 using namespace gunrock::app::bfs;
 
 /******************************************************************************
+ * Switch 32/64-bit variables
+ ******************************************************************************/
+#define USE64 1
+
+/******************************************************************************
  * Defines, constants, globals
  ******************************************************************************/
 
@@ -763,9 +768,20 @@ int main( int argc, char** argv)
     // Construct graph and perform search(es)
     //
 
+#if USE64
+
+    typedef int64_t VertexId;
+    typedef int64_t Value;
+    typedef int64_t SizeT;
+
+#else
+
     typedef int VertexId;                   // Use as the node identifier
     typedef int Value;                      // Use as the value type
     typedef int SizeT;                      // Use as the graph size type
+
+#endif
+
     Csr<VertexId, Value, SizeT> csr(false); // default for stream_from_host
     if (graph_args < 1) { Usage(); return 1; }
 
