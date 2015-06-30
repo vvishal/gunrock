@@ -102,7 +102,12 @@ struct StaleInitFunctor
     static __device__ __forceinline__ bool CondFilter(
         VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
     {
+        if (node==25)
+            printf("%f  %f\n", problem->rank_stale[node],problem->rank_next[node]);
          problem->rank_stale[node] = problem->rank_next[node] - problem->rank_stale[node];
+         if (node==25)
+             printf(" %f\n", problem->rank_stale[node]);
+
          return false;
     }
 
@@ -132,6 +137,49 @@ struct StaleUpdateFunctor
 
     }
 };
+
+
+template<
+    typename VertexId, typename SizeT, typename Value, typename ProblemData>
+struct StaleFinalFunctor
+{
+    typedef typename ProblemData::DataSlice DataSlice;
+
+    static __device__ __forceinline__ bool CondFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+        problem->rank_stale[node] = problem->rank_next[node];
+        return false;
+    }
+
+    static __device__ __forceinline__ void ApplyFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+
+    }
+};
+
+
+template<
+    typename VertexId, typename SizeT, typename Value, typename ProblemData>
+struct StaleModifyFunctor
+{
+    typedef typename ProblemData::DataSlice DataSlice;
+
+    static __device__ __forceinline__ bool CondFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+        problem->rank_next[node] = problem->rank_next[node] + problem->rank_stale[node];
+        return false;
+    }
+
+    static __device__ __forceinline__ void ApplyFilter(
+        VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
+    {
+
+    }
+};
+
 
 
 
