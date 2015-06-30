@@ -396,7 +396,7 @@ struct Dispatch<KernelPolicy, ProblemData, Functor, true>
                         } else {
                             if (d_out != NULL) {
                                  util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                        -1,
+                                        ( VertexId ) -1,
                                         d_out + out_index);
                             }
 
@@ -475,7 +475,7 @@ struct Dispatch<KernelPolicy, ProblemData, Functor, true>
                         } else {
                             if (d_out != NULL) {
                                 util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                        -1,
+                                        ( VertexId ) -1,
                                         d_out + out_index);
                             }
 
@@ -678,7 +678,7 @@ struct Dispatch<KernelPolicy, ProblemData, Functor, true>
                 else {
                     if (d_out != NULL) {
                         util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                -1,
+                                ( VertexId ) -1,
                                 d_out + offset+i);
                     }
                     if (d_value_to_reduce != NULL) {
@@ -760,7 +760,7 @@ struct Dispatch<KernelPolicy, ProblemData, Functor, true>
                 else {
                     if (d_out != NULL) {
                         util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                -1,
+                                ( VertexId ) -1,
                                 d_out + offset+i);
                     }
                     

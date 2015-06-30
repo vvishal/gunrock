@@ -93,10 +93,10 @@ cudaError_t ComputeOutputLength(
     Scan<mgpu::MgpuScanTypeInc>(
         (SizeT*)partitioned_scanned_edges, 
         frontier_attribute->queue_length, // TODO: +1?
-        (int )0, 
+        (Value )0, 
         mgpu::plus<SizeT>(),
-        (int*)0, 
-        (int*)0, 
+        (Value *)0, 
+        (Value *)0, 
         (SizeT*)partitioned_scanned_edges, 
         context);
 

@@ -348,7 +348,7 @@ namespace edge_map_forward {
                                             else {
                                                 if (cta->d_out != NULL) {
                                                     util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                                        -1,
+                                                        ( VertexId )-1,
                                                         cta->d_out + cta->smem_storage.state.coarse_enqueue_offset + coop_rank);
                                                 }
                                                 if (cta->d_value_to_reduce != NULL) {
@@ -449,7 +449,7 @@ namespace edge_map_forward {
                                             else {
                                                 if (cta->d_out != NULL) {
                                                     util::io::ModifiedStore<ProblemData::QUEUE_WRITE_MODIFIER>::St(
-                                                        -1,
+                                                        ( VertexId ) -1,
                                                         cta->d_out + cta->smem_storage.state.coarse_enqueue_offset + coop_rank);
                                                 }
                                                 if (cta->d_value_to_reduce != NULL) {
