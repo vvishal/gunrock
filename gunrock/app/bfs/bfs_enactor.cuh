@@ -66,9 +66,12 @@ namespace bfs {
             key = keys_in[x];
             t   = s_vertex_associate_in[0][x];
 
-            if (atomicCAS(s_vertex_associate_org[0]+key, -1, t)!= -1)
+	    // Cast to support 64-bit graphs
+            if ( atomicCAS( ( unsigned long long int*) s_vertex_associate_org[0]+key, -1,
+			    ( unsigned long long int) t ) != -1 )
             {
-               if (atomicMin(s_vertex_associate_org[0]+key, t)<=t)
+               if ( atomicMin( ( unsigned long long int* ) s_vertex_associate_org[0]+key,
+			       ( unsigned long long int ) t ) <= t )
                {
                    keys_out[x]=-1;
                    x+=STRIDE;
