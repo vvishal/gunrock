@@ -169,6 +169,11 @@ struct StaleModifyFunctor
     static __device__ __forceinline__ bool CondFilter(
         VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
     {
+        if(isinf(problem->rank_next[node])) printf("foundingINF");
+        if(isinf(problem->rank_stale[node])) printf("foundingINF");
+        if(isnan(problem->rank_next[node])) printf("foundingNAN");
+        if(isnan(problem->rank_stale[node])) printf("foundingNAN");
+
         problem->rank_next[node] = problem->rank_next[node] + problem->rank_stale[node];
         return false;
     }
@@ -236,7 +241,7 @@ struct PRFunctor
     {
         //if (TO_TRACK)
         //if (to_track(d_id)) printf("%d \tr[%d] \t+= %f\t from %d,%f\n", problem->gpu_idx, d_id, problem->rank_curr[s_id] / problem->degrees[s_id], s_id, problem->rank_curr[s_id]);
-        atomicAdd(problem->rank_next + d_id, 
+        atomicAdd(problem->rank_next + d_id,
             problem->rank_curr[s_id]/problem->degrees[s_id]);
     }
 

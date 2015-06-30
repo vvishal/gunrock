@@ -661,6 +661,7 @@ public:
     typedef StaleUpdateFunctor      <VertexId, SizeT, Value, Problem> StaleUpdateFunctor;
     typedef StaleInitFunctor      <VertexId, SizeT, Value, Problem> StaleInitFunctor;
     typedef StaleFinalFunctor      <VertexId, SizeT, Value, Problem> StaleFinalFunctor;
+    typedef StaleModifyFunctor      <VertexId, SizeT, Value, Problem> StaleModifyFunctor;
 
     typedef enum{
         PR_NEXT,
@@ -706,7 +707,6 @@ public:
     }
 
 
-
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -743,35 +743,54 @@ public:
 
 	  for(int microIter=0; microIter<MAX_MICRO; microIter++)
       {
+          if(microIter==0)
+          {
+              frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
+              frontier_attribute->queue_reset = true;
+
+              gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleInitFunctor>
+              <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
+                  enactor_stats->iteration,
+                  frontier_attribute->queue_reset,
+                  frontier_attribute->queue_index,
+                  frontier_attribute->queue_length,
+                  frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
+                  NULL,
+                  NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
+                  d_data_slice,
+                  NULL,
+                  work_progress[0],
+                  frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
+                  frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
+                  enactor_stats->filter_kernel_stats);
+          }else{
+              frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
+              frontier_attribute->queue_reset = true;
+
+              gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleModifyFunctor>
+              <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
+                  enactor_stats->iteration,
+                  frontier_attribute->queue_reset,
+                  frontier_attribute->queue_index,
+                  frontier_attribute->queue_length,
+                  frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
+                  NULL,
+                  NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
+                  d_data_slice,
+                  NULL,
+                  work_progress[0],
+                  frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
+                  frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
+                  enactor_stats->filter_kernel_stats);
+
+          }
+
+
+          cudaThreadSynchronize();
+
+
         if (enactor_stats -> iteration != 0)
         {
-            if(microIter==0)
-            {
-                frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
-                frontier_attribute->queue_reset = true;
-
-                gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleInitFunctor>
-                <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
-                    enactor_stats->iteration,
-                    frontier_attribute->queue_reset,
-                    frontier_attribute->queue_index,
-                    frontier_attribute->queue_length,
-                    frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
-                    NULL,
-                    NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
-                    d_data_slice,
-                    NULL,
-                    work_progress[0],
-                    frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
-                    frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
-                    enactor_stats->filter_kernel_stats);
-
-                    cudaThreadSynchronize();
-
-            }
-
-            cudaThreadSynchronize();
-
 
             printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
@@ -779,14 +798,10 @@ public:
             printf("\n");       fflush(stdout);
 
 
-//            printf("%d\n",data_slice -> edge_map_queue_len);
-
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
             frontier_attribute->queue_reset = true;
 
-
-            //printf("Filter start.\n");fflush(stdout);
              // filter kernel
             gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, PrFunctor>
             <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
@@ -804,15 +819,9 @@ public:
                 frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
                 enactor_stats->filter_kernel_stats);
 
-            //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "filter_forward::Kernel failed", __FILE__, __LINE__))) break;
-            //cudaEventQuery(throttle_event); // give host memory mapped visibility to GPU updates
-
             frontier_attribute->queue_index++;
 
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
-            if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
-            data_slice->PR_queue_length = frontier_attribute->queue_length;
-            cudaThreadSynchronize();
 
             printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
@@ -820,69 +829,23 @@ public:
             printf("\n");
 
             //swap rank_curr and rank_next
-//            util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
-//                data_slice->rank_curr.GetPointer(util::DEVICE),
-//                data_slice->rank_next.GetPointer(util::DEVICE),
-//                graph_slice->nodes);
-//ODED            util::MemsetKernel<<<128, 128, 0, stream>>>(
- //               data_slice->rank_next.GetPointer(util::DEVICE),
-//                (Value)0.0, graph_slice->nodes);
-
             util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_curr.GetPointer(util::DEVICE),
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 graph_slice->nodes);
-            cudaThreadSynchronize();
             util::MemsetKernel<<<128, 128, 0, stream>>>(
-                          data_slice->rank_next.GetPointer(util::DEVICE),
-                          (Value)0.0, graph_slice->nodes);
-            cudaThreadSynchronize();
+                data_slice->rank_next.GetPointer(util::DEVICE),
+                (Value)0.0, graph_slice->nodes);
 
-            frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
-            frontier_attribute->queue_reset = true;
-//            if(microIter>0 ){//&& (microIter == (MAX_MICRO-1)) ){
-              if((microIter+1<MAX_MICRO) ){//&& (microIter == (MAX_MICRO-1)) ){
-                gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, StaleUpdateFunctor>
-                <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
-                    enactor_stats->iteration,
-                    frontier_attribute->queue_reset,
-                    frontier_attribute->queue_index,
-                    frontier_attribute->queue_length,
-                    frontier_queue->keys[frontier_attribute->selector  ].GetPointer(util::DEVICE),      // d_in_queue
-                    NULL,
-                    NULL,//frontier_queue->keys[frontier_attribute->selector^1].GetPointer(util::DEVICE),// d_out_queue
-                    d_data_slice,
-                    NULL,
-                    work_progress[0],
-                    frontier_queue->keys[frontier_attribute->selector  ].GetSize(),           // max_in_queue
-                    frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
-                    enactor_stats->filter_kernel_stats);
+            if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
+            data_slice->PR_queue_length = frontier_attribute->queue_length;
 
-                //printf("\n\n\n");
-            }
-
-            cudaThreadSynchronize();
 
             printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printf("\n");       fflush(stdout);
 
-            //enactor_stats      -> Accumulate(
-            //    work_progress  -> GetQueueLengthPointer<unsigned int,SizeT>(frontier_attribute->queue_index), stream);
-            //printf("queue_length = %d\n", frontier_attribute->queue_length);fflush(stdout);
-            if (false) {//if (INSTRUMENT || DEBUG) {
-                //if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length,false,stream)) return;
-                //enactor_stats->total_queued += frontier_attribute->queue_length;
-                //if (DEBUG) printf(", %lld", (long long) frontier_attribute.queue_length);
-                if (Enactor::INSTRUMENT) {
-                    if (enactor_stats->retval = enactor_stats->filter_kernel_stats.Accumulate(
-                        enactor_stats->filter_grid_size,
-                        enactor_stats->total_runtimes,
-                        enactor_stats->total_lifetimes,
-                        false, stream)) return;
-                }
-            }
         }
 
 
@@ -926,12 +889,10 @@ public:
         enactor_stats->total_queued[0] += frontier_attribute->queue_length;
         frontier_attribute->queue_length = data_slice->edge_map_queue_len;
 
-
-
         cudaThreadSynchronize();
         enactor_stats->iteration++;
-
         if (data_slice->PR_queue_length==0){
+            printf("found zero new vertices in this iteration\n");
                 enactor_stats->iteration += MAX_MICRO-1-microIter;
             break;
         }
@@ -946,10 +907,6 @@ public:
                     (Value)0.0, graph_slice->nodes);
 
       cudaThreadSynchronize();
-//    util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
-//        data_slice->rank_stale.GetPointer(util::DEVICE),
-//        data_slice->rank_next.GetPointer(util::DEVICE),
-//        graph_slice->nodes);
 
 
       frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
@@ -988,29 +945,6 @@ cudaThreadSynchronize();
         enactor_stats->iteration--;
 
 
-		//printf("Advance end.\n");fflush(stdout); 
-
-        //if (DEBUG && (retval = util::GRError(cudaThreadSynchronize(), "edge_map_forward::Kernel failed", __FILE__, __LINE__))) break;
-        //cudaEventQuery(throttle_event);                                 // give host memory mapped visibility to GPU updates 
-
-        /*if (Enactor::DEBUG) {
-            if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
-        }
-
-        if (Enactor::INSTRUMENT) {
-            if (enactor_stats->retval = enactor_stats->advance_kernel_stats.Accumulate(
-                enactor_stats->advance_grid_size,
-                enactor_stats->total_runtimes,
-                enactor_stats->total_lifetimes, false, stream)) return;
-        }*/
-
-        //if (done[0] == 0) break; 
-        
-        //if (enactor_stats->retval = work_progress->SetQueueLength(frontier_attribute->queue_index, edge_map_queue_len)) return;
-
-        //if (done[0] == 0 || frontier_attribute.queue_length == 0 || enactor_stats.iteration > max_iteration) break;
-
-        //if (DEBUG) printf("\n%lld", (long long) enactor_stats.iteration);
     }
 
     static cudaError_t Compute_OutputLength(
