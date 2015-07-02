@@ -722,12 +722,12 @@ public:
         ContextPtr                     context,
         cudaStream_t                   stream)
     {
-      int MAX_MICRO=2;
+      int MAX_MICRO=1;
 
       const int start=3, stop=15,thread_int=0;
 
       if (enactor_stats -> iteration == 0){
-
+          if(thread_num==thread_int) printf("This should only happen for the first thread\n");
           util::MemsetKernel<<<128, 128, 0, stream>>>(
            data_slice->rank_stale.GetPointer(util::DEVICE),
           (Value)0.0, graph_slice->nodes);
@@ -735,9 +735,9 @@ public:
       cudaThreadSynchronize();
 
 
-      printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
-      printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
-      printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
+      //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
+      //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
+      //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
       printf("\n");       fflush(stdout);
 
 
@@ -792,9 +792,9 @@ public:
         if (enactor_stats -> iteration != 0)
         {
 
-            printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printf("\n");       fflush(stdout);
 
 
@@ -823,9 +823,9 @@ public:
 
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
 
-            printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printf("\n");
 
             //swap rank_curr and rank_next
@@ -841,9 +841,9 @@ public:
             data_slice->PR_queue_length = frontier_attribute->queue_length;
 
 
-            printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
+            //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             printf("\n");       fflush(stdout);
 
         }
@@ -902,9 +902,9 @@ public:
 	  } 
 
       cudaThreadSynchronize();
-      util::MemsetKernel<<<128, 128, 0, stream>>>(
-                    data_slice->rank_stale.GetPointer(util::DEVICE),
-                    (Value)0.0, graph_slice->nodes);
+//      util::MemsetKernel<<<128, 128, 0, stream>>>(
+//                    data_slice->rank_stale.GetPointer(util::DEVICE),
+//                    (Value)0.0, graph_slice->nodes);
 
       cudaThreadSynchronize();
 
@@ -932,9 +932,9 @@ public:
     frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
 
 
-    printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
-    printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
-    printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
+    //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
+    //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
+    //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
     printf("\n");       fflush(stdout);
 
 

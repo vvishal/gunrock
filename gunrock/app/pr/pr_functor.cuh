@@ -102,11 +102,11 @@ struct StaleInitFunctor
     static __device__ __forceinline__ bool CondFilter(
         VertexId node, DataSlice *problem, Value v = 0, SizeT nid=0)
     {
-        if (node==25)
-            printf("%f  %f\n", problem->rank_stale[node],problem->rank_next[node]);
+//        if (node==25)
+//            printf("%f  %f\n", problem->rank_stale[node],problem->rank_next[node]);
          problem->rank_stale[node] = problem->rank_next[node] - problem->rank_stale[node];
-         if (node==25)
-             printf(" %f\n", problem->rank_stale[node]);
+//         if (node==25)
+//             printf(" %f\n", problem->rank_stale[node]);
 
          return false;
     }
