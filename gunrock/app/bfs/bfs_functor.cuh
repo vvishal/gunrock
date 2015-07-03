@@ -48,6 +48,8 @@ struct BFSFunctor
      */
     static __device__ __forceinline__ bool CondEdge(VertexId s_id, VertexId d_id, DataSlice *problem, VertexId e_id = 0, VertexId e_id_in = 0)
     {
+        typedef typename gunrock::util::make_unsigned<VertexId>::type UVertexId;  // Get the unsigned type for atomics
+								     // This will generate warnings when "int" is used
         if (ProblemData::ENABLE_IDEMPOTENCE) {
             return true;
         } else {
@@ -61,8 +63,8 @@ struct BFSFunctor
                 new_weight = label + 1;
             }
             else new_weight = s_id +1;
-            bool result = new_weight < atomicMin( ( unsigned long long int*) ( problem->labels + d_id ),
-						  ( unsigned long long int ) new_weight);
+            bool result = new_weight < atomicMin( ( UVertexId*) ( problem->labels + d_id ),
+						  ( UVertexId ) new_weight);
             return result;
         }
     }

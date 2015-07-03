@@ -770,9 +770,9 @@ int main( int argc, char** argv)
 
 #if USE64
 
-    typedef int64_t VertexId;
-    typedef int64_t Value;
-    typedef int64_t SizeT;
+    typedef long long int VertexId;
+    typedef long long int Value;
+    typedef long long int SizeT;
 
 #else
 

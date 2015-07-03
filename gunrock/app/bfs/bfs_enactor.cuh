@@ -18,6 +18,7 @@
 #include <gunrock/util/multithread_utils.cuh>
 #include <gunrock/util/kernel_runtime_stats.cuh>
 #include <gunrock/util/test_utils.cuh>
+#include <gunrock/util/basic_utils.cuh>
 
 #include <gunrock/oprtr/advance/kernel.cuh>
 #include <gunrock/oprtr/advance/kernel_policy.cuh>
@@ -44,6 +45,8 @@ namespace bfs {
         const size_t           array_size,
               char*            array)
     {
+	typedef typename gunrock::util::make_unsigned<VertexId>::type UVertexId;  // Get the unsigned type for atomics
+								     // This will generate warnings when "int" is used
         extern __shared__ char s_array[];
         const SizeT STRIDE = gridDim.x * blockDim.x;
         size_t offset = 0;
@@ -67,11 +70,11 @@ namespace bfs {
             t   = s_vertex_associate_in[0][x];
 
 	    // Cast to support 64-bit graphs
-            if ( atomicCAS( ( unsigned long long int*) s_vertex_associate_org[0]+key, -1,
-			    ( unsigned long long int) t ) != -1 )
+            if ( atomicCAS( ( UVertexId*) s_vertex_associate_org[0]+key, ( UVertexId ) -1,
+			    ( UVertexId ) t ) != -1 )
             {
-               if ( atomicMin( ( unsigned long long int* ) s_vertex_associate_org[0]+key,
-			       ( unsigned long long int ) t ) <= t )
+               if ( atomicMin( ( UVertexId*  ) s_vertex_associate_org[0]+key,
+			       ( UVertexId  ) t ) <= t )
                {
                    keys_out[x]=-1;
                    x+=STRIDE;
