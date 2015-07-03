@@ -312,6 +312,12 @@ __device__ __host__ __forceinline__ int MaxValue<int>()
     return INT_MAX;
 }
 
+template <>
+__device__ __host__ __forceinline__ long long int MaxValue<long long int>()
+{
+    return LLONG_MAX;
+}
+
 /******************************************************************************
  * Helper routines for list construction and validation
  ******************************************************************************/
