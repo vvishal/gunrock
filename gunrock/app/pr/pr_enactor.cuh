@@ -958,7 +958,7 @@ public:
             //util::cpu_mt::PrintGPUArray("markers", data_slice[0]->markers.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
             
             for (peer_ = 0; peer_<num_gpus; peer_++)
-                util::MemsetKernel<<<128, 128, 0, stream>>> ( data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), 0, graph_slice->nodes);
+		util::MemsetKernel<<<128, 128, 0, stream>>> ( data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), ( SizeT ) 0, graph_slice->nodes);
             Assign_Marker_PR<VertexId, SizeT>
                 <<<grid_size, block_size, num_gpus * sizeof(SizeT*), stream>>> (
                 graph_slice->nodes,

@@ -385,7 +385,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             
             // Compute degrees
             util::MemsetKernel<<<128, 128>>>(
-                data_slices[gpu]->degrees  .GetPointer(util::DEVICE), 0, nodes);
+                data_slices[gpu]->degrees  .GetPointer(util::DEVICE), ( SizeT ) 0, nodes);
             
             if (this->num_gpus == 1)
             {

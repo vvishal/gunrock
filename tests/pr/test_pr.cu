@@ -44,6 +44,11 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/page_rank.hpp>
 
+/******************************************************************************
+ * Use 64-bit values 
+ ******************************************************************************/
+#define USE64 1
+
 using namespace gunrock;
 using namespace gunrock::util;
 using namespace gunrock::oprtr;
@@ -705,9 +710,16 @@ int main( int argc, char** argv)
     parameter -> gpu_idx     = gpu_idx;
     parameter -> streams     = streams;
 
+#if USE64 
+    typedef long long int VertexId;							// Use as the node identifier type
+    typedef float Value;								// Use as the value type
+    typedef long long int SizeT;								// Use as the graph size type
+#else
     typedef int VertexId;							// Use as the node identifier type
     typedef float Value;								// Use as the value type
     typedef int SizeT;								// Use as the graph size type
+#endif
+
     Csr<VertexId, Value, SizeT> graph(false);         // default value for stream_from_host is false
 
 	if (graph_type == "market") {
