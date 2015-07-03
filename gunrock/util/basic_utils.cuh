@@ -1,3 +1,17 @@
+// ----------------------------------------------------------------
+// Gunrock -- Fast and Efficient GPU Graph Library
+// ----------------------------------------------------------------
+// This source code is distributed under the terms of LICENSE.TXT
+// in the root directory of this source distribution.
+// ----------------------------------------------------------------
+
+/**
+ * @file
+ * basic_utils.cuh
+ *
+ * @brief Basic Utilities for the kernel
+ */
+
 
 namespace gunrock {
 namespace util {
