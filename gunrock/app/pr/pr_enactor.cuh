@@ -663,6 +663,7 @@ public:
     typedef StaleFinalFunctor      <VertexId, SizeT, Value, Problem> StaleFinalFunctor;
     typedef StaleModifyFunctor      <VertexId, SizeT, Value, Problem> StaleModifyFunctor;
 
+
     typedef enum{
         PR_NEXT,
         PR_CURR,
@@ -699,7 +700,7 @@ public:
                 printf("%2.3f, ",hostArray[i]);       fflush(stdout);
 
             }
-            printf("\n");      fflush(stdout);
+            //printf("\n");      fflush(stdout);
 
         free(hostArray);
         cudaThreadSynchronize();
@@ -726,8 +727,13 @@ public:
 
       const int start=3, stop=15,thread_int=0;
 
+      // The variable rank_stale is used to represent the external page-rank of a vertex.
+      // We call this the "stale" rank of a vertex as it will be used for multiple micro-iterations
+      // of page-rank without being fully updated.
+
+      // Initializing the stale values to be zero on the first iteration of page rank.
+      // This should happen exactly once!
       if (enactor_stats -> iteration == 0){
-          if(thread_num==thread_int) printf("This should only happen for the first thread\n");
           util::MemsetKernel<<<128, 128, 0, stream>>>(
            data_slice->rank_stale.GetPointer(util::DEVICE),
           (Value)0.0, graph_slice->nodes);
@@ -738,13 +744,16 @@ public:
       //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
       //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
       //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,-1);
-      printf("\n");       fflush(stdout);
+      //printf("\n");       fflush(stdout);
 
-
+      // Loop over the micro iterations.
 	  for(int microIter=0; microIter<MAX_MICRO; microIter++)
       {
           if(microIter==0)
           {
+              // This occurs for the first micro iteration following the sync.
+              // The stale value is updated based on the accumulated page rank value of a vertex on
+              // all compute nodes.
               frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
               frontier_attribute->queue_reset = true;
 
@@ -764,6 +773,8 @@ public:
                   frontier_queue->keys[frontier_attribute->selector^1].GetSize(),         // max_out_queue
                   enactor_stats->filter_kernel_stats);
           }else{
+              // For all other micro iterations, the stale value (i.e. the vertex external dependency
+              // value is added to the page rank value computed in the previous micro-iteration.
               frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
               frontier_attribute->queue_reset = true;
 
@@ -784,25 +795,30 @@ public:
                   enactor_stats->filter_kernel_stats);
 
           }
-
-
           cudaThreadSynchronize();
 
-
+        // The following functor is called for all iterations but the first one as rank_curr has not been previously
+        // computed and its value are required for the functor call. For all remaining iterations rank_curr should have
+        // a valid value.
         if (enactor_stats -> iteration != 0)
         {
 
             //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printf("\n");       fflush(stdout);
+            //printf("\n");       fflush(stdout);
 
 
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
             frontier_attribute->queue_reset = true;
 
-             // filter kernel
+            // Filter kernel - this kernel serves two major purposes. The first is to update the rank-next values
+            // of vertices - specifically when MAX_MICRO=0, it serves to update the page-rank after the accumulation.
+            // The second purpose of this function is to ascertain if any of the vertices in this current partition requires
+            // its page rank to be updated (based on the thresh-hold value).
+            // If no vertices requires updating for all partitions (i.e. compute nodes), then
+            // the page rank computation can be halted.
             gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, PrFunctor>
             <<<enactor_stats->filter_grid_size, FilterKernelPolicy::THREADS, 0, stream>>>(
                 enactor_stats->iteration,
@@ -826,17 +842,19 @@ public:
             //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printf("\n");
+            //printf("\n");  fflush(stdout);
 
-            //swap rank_curr and rank_next
+            // Copying rank_next to rank_curr for the next phase of the computation
             util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_curr.GetPointer(util::DEVICE),
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 graph_slice->nodes);
+            // Resetting rank_next to 0.
             util::MemsetKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 (Value)0.0, graph_slice->nodes);
 
+            // Counting the number of vertices that had a change to their page-rank value in this iteration.
             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
             data_slice->PR_queue_length = frontier_attribute->queue_length;
 
@@ -844,7 +862,7 @@ public:
             //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
             //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,microIter);
-            printf("\n");       fflush(stdout);
+            //printf("\n");       fflush(stdout);
 
         }
 
@@ -855,7 +873,7 @@ public:
         //util::cpu_mt::PrintGPUArray<SizeT, Value>("ranks", data_slice->rank_curr.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, peer_, stream);
 
         //printf("Advance start.\n");fflush(stdout);
-        // Edge Map
+        // Updating the page rank value using the advance kernel.
         frontier_attribute->queue_length = data_slice->edge_map_queue_len;
         frontier_attribute->queue_reset = true;
         gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrFunctor>(
@@ -891,23 +909,21 @@ public:
 
         cudaThreadSynchronize();
         enactor_stats->iteration++;
+
+        // If none of the vertices required updating, then there is no point in finishing the remaining micro
+        // iterations and thus we can break out early.
         if (data_slice->PR_queue_length==0){
             printf("found zero new vertices in this iteration\n");
                 enactor_stats->iteration += MAX_MICRO-1-microIter;
             break;
         }
 
+        // Checking that we are not executing more itartions than allowed.
         if (enactor_stats->iteration > data_slice->max_iter)
             break;
 	  } 
 
       cudaThreadSynchronize();
-//      util::MemsetKernel<<<128, 128, 0, stream>>>(
-//                    data_slice->rank_stale.GetPointer(util::DEVICE),
-//                    (Value)0.0, graph_slice->nodes);
-
-      cudaThreadSynchronize();
-
 
       frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
       frontier_attribute->queue_reset = true;
@@ -935,8 +951,7 @@ public:
     //printArray(data_slice,PR_CURR,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
     //printArray(data_slice,PR_NEXT,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
     //printArray(data_slice,PR_STALE,graph_slice->nodes,start,stop,thread_num,thread_int,MAX_MICRO+1);
-    printf("\n");       fflush(stdout);
-
+    //printf("\n");       fflush(stdout);
 
     if(thread_num==0)
         printf("\n\nBack to superstep\n\n");       fflush(stdout);
