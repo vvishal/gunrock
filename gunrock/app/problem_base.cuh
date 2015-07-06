@@ -41,8 +41,10 @@
 #define CHECKPOINT printf("checkpoint %s:%d\n",__FILE__,__LINE__);fflush(stdout);
 #define CHECKPOINT_RT ;//printf("rank/thread %d/%d checkpoint %s:%d\n", problem -> mpi_topology->local_rank,thread_num,__FILE__,__LINE__);fflush(stdout);
 #define CHECKPOINT_RTT ;//printf("\e[%imrank/thread %d/%d checkpoint %s:%d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__);fflush(stdout);
-#define CHECKPOINT_RTL ;//printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
+#define CHECKPOINT_RTL //;printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
 #define CHECKPOINT_RTL2 printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 34+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
+#define CHECKPOINT_KEYS cudaMemcpy(&keys, data_slice->frontier_queues[0].keys[0].GetPointer(util::DEVICE), sizeof(int)*3, cudaMemcpyDeviceToHost);printf("data_slice->frontier_queues[0]->keys[0] %i %i %i (line:%i)\n",keys[0],keys[1],keys[2],__LINE__);
+#define CHECKPOINT_KEYS_PR cudaMemcpy(&keys, frontier_queue->keys[0].GetPointer(util::DEVICE), sizeof(int)*3, cudaMemcpyDeviceToHost);printf("frontier_queue->keys[0] %i %i %i (line:%i)\n",keys[0],keys[1],keys[2],__LINE__);
 
 
 
@@ -350,8 +352,9 @@ namespace app {
 	   int num_vertex_associate;
 	   int num_value__associate;
        volatile int * checked;
+       volatile int * fill_level;
 
-       MPI_Ring_Buffer(int num_gpu_global, int size, SizeT    num_vertex_associate, SizeT    num_value__associate) //ring buffer initialization
+       MPI_Ring_Buffer(int num_gpu_global, int size, SizeT num_vertex_associate, SizeT    num_value__associate) //ring buffer initialization
        {
 		   this->num_vertex_associate = num_vertex_associate;
 		   this->num_value__associate = num_value__associate;
@@ -392,6 +395,7 @@ namespace app {
            back_pos  = (volatile int*)malloc(sizeof(int)*num_gpu_global);
            allocated = (volatile int**)malloc(sizeof(int*)*num_gpu_global);
            msg_length = (volatile int**)malloc(sizeof(int*)*num_gpu_global);
+           fill_level = (volatile int*)malloc(sizeof(int)*num_gpu_global);
            if(allocated==NULL || msg_length==NULL || front_pos==NULL || back_pos==NULL)
            {
                fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
@@ -409,7 +413,9 @@ namespace app {
                }
                front_pos[i]  = 0;
                back_pos[i]   = 0;
+               fill_level[i] = 0;
            }
+
        }
 
        void initBarrier(int num_gpus_local){
@@ -421,13 +427,13 @@ namespace app {
        }
 
        int has_data(int index){
-           if (front_pos[index]!=back_pos[index]) return 1;
+           if (fill_level[index]>0) return 1;
            return 0;
        }
 
        void pop_back(int i){
+           fill_level[i]--;
            back_pos[i]  = (back_pos[i]+1)%length;
-           front_pos[i] = (front_pos[i]+1)%length;
        }
    };
 

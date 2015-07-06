@@ -234,6 +234,42 @@ CHECKPOINT
         return retval;
     }
 
+
+#ifdef WITHMPI
+
+
+    /**
+     * \addtogroup PublicInterface
+     * @{
+     */
+
+    /**
+     * @brief Copy result labels and/or predecessors computed on the GPU back to host-side vectors.
+     *
+     * @param[in] gpu_index the index of the GPU doing the final computation (rank 0, GPU 0).
+     * @param[out] h_rank host-side vector to store page rank values.
+     * @param[out] h_node_id host-side vector to store node Vertex ID.
+     *
+     *\return cudaError_t object which indicates the success of all CUDA function calls.
+     */
+    cudaError_t Extract(int gpu_index, Value *h_rank, VertexId *h_node_id)
+    {
+        cudaError_t retval = cudaSuccess;
+
+        do {
+            if (retval = util::SetDevice(gpu_index)) return retval;
+            data_slices[0]->rank_curr.SetPointer(h_rank);
+            if (retval = data_slices[0]->rank_curr.Move(util::DEVICE, util::HOST)) return retval;
+            data_slices[0]->node_ids .SetPointer(h_node_id);
+            if (retval = data_slices[0]->node_ids .Move(util::DEVICE, util::HOST)) return retval;
+        } while(0);
+
+        return retval;
+    }
+
+
+#endif
+
     /**
      * @brief PRProblem initialization
      *

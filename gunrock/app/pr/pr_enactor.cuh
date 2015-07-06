@@ -264,6 +264,7 @@ namespace pr {
         {
             VertexId key = keys_in[x];
             ranks_out[key] = ranks_in[x];
+            //printf("ranks_out[%d] = %f\n",key, ranks_out[key]);
             x+=STRIDE;
         }
     }
@@ -313,7 +314,11 @@ public:
             frontier_attribute->queue_reset  = true;
             frontier_attribute->selector     = 0;
             frontier_attribute->queue_index  = 0;
+#ifdef WITHMPI
             frontier_attribute->queue_length = data_slice->num_gpus>1 ? data_slice->local_nodes : graph_slice->nodes;
+#else
+            frontier_attribute->queue_length = data_slice->num_gpus>1 ? data_slice->local_nodes : graph_slice->nodes;
+#endif
         }
     }
 
@@ -658,12 +663,6 @@ public:
     typedef PRFunctor      <VertexId, SizeT, Value, Problem> PrFunctor;
     typedef PRMarkerFunctor<VertexId, SizeT, Value, Problem> PrMarkerFunctor;
 
-
-    static void print_details(unsigned int queue_index, SizeT queue_length, bool flag, cudaStream_t stream){
-        printf("%i, %d\n",queue_index, queue_length);
-    }
-
-
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -684,6 +683,25 @@ public:
         {
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
+
+
+
+            float x1[10];
+            float x2[10];
+            int max_display = graph_slice->nodes>10?10:graph_slice->nodes;
+            printf("A:");
+            cudaMemcpy(x1,data_slice->rank_curr.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+            cudaMemcpy(x2,data_slice->rank_next.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+
+            for(int h=0;h<max_display; h++){
+            	printf(" %f ", x1[h]);
+            }
+            printf(" | ");
+            for(int h=0;h<max_display; h++){
+            	printf(" %f ", x2[h]);
+            }
+
+            printf("\n--\n");
 
             //printf("Filter start.\n");fflush(stdout);
              // filter kernel
@@ -709,19 +727,49 @@ public:
             //printf("Filter end.\n");fflush(stdout);
             //enactor_stats->iteration++;
             frontier_attribute->queue_index++;
-            print_details(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream);
+
             if (enactor_stats->retval = work_progress->GetQueueLength(frontier_attribute->queue_index, frontier_attribute->queue_length, false, stream)) return;
 
             //num_elements = queue_length;
 
             //swap rank_curr and rank_next
+
+            printf("B:");
+            cudaMemcpy(x1,data_slice->rank_curr.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+            cudaMemcpy(x2,data_slice->rank_next.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+
+            for(int h=0;h<max_display; h++){
+            	printf(" %f ", x1[h]);
+            }
+            printf(" | ");
+            for(int h=0;h<max_display; h++){
+            	printf(" %f ", x2[h]);
+            }
+
+            printf("\n--\n");
+
             util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_curr.GetPointer(util::DEVICE),
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 graph_slice->nodes);
+            if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
             util::MemsetKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 (Value)0.0, graph_slice->nodes);
+
+            printf("C:");
+            cudaMemcpy(x1,data_slice->rank_curr.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+            cudaMemcpy(x2,data_slice->rank_next.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
+
+            for(int h=0;h<max_display; h++){
+                printf(" %f ", x1[h]);
+            }
+            printf(" | ");
+            for(int h=0;h<max_display; h++){
+                printf(" %f ", x2[h]);
+            }
+
+            printf("\n\n\n\n\n");
 
             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
             data_slice->PR_queue_length = frontier_attribute->queue_length;
@@ -882,13 +930,13 @@ public:
 		int rank = mpi_topology->local_rank;
 		int num_gpu_local = mpi_topology->num_gpus_per_server[rank];
 		int num_gpu_global = mpi_topology->total_num_gpus;
-		bool ret_val=true;
+		int ret_val=1;
         bool all_zero = true;
         for (int gpu = 0; gpu < num_gpu_local*num_gpu_global; gpu++)
         if (enactor_stats[gpu].retval != cudaSuccess)
         {
             printf("(CUDA error %d @ GPU %d: %s\n", enactor_stats[gpu].retval, gpu%num_gpu_global, cudaGetErrorString(enactor_stats[gpu].retval)); fflush(stdout);
-            ret_val = false;
+            ret_val = 0;
         }
 
         for (int gpu =0; gpu < num_gpu_local; gpu++){
@@ -896,7 +944,7 @@ printf("%s:%d ==== data_slices[%d]->PR_queue_length = %d;\n",__FILE__,__LINE__,g
         if (data_slice[gpu]->PR_queue_length > 0)
         {
             //printf("data_slice[%d].PR_queue_length = %d\n", gpu, data_slice[gpu]->PR_queue_length);
-            all_zero = false;
+            all_zero = 0;
         }
     }
 printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
@@ -905,7 +953,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
         	if (enactor_stats[gpu * num_gpu_global].iteration < data_slice[0]->max_iter)
         	{
             	//printf("enactor_stats[%d].iteration = %lld\n", gpu, enactor_stats[gpu * num_gpus].iteration);
-            	ret_val = false;
+            	ret_val = 0;
         	}
 		}
 
@@ -914,40 +962,12 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 		//synchronize with all nodes
 		int world_rec_val=1;
 
-		for(int r=0; r<mpi_topology->num_servers; r++) //let every node do a Broadcast of its stop_condition
-		{
-            int buffer=ret_val? 1 : 0;
-            if(r==mpi_topology->local_rank)
-            {
-                printf("         \e[%im sending MPI Broadcast  as %d, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,rank,r, mpi_topology->num_servers,
-                world_rec_val, buffer); fflush(stdout);
-            }
-            else
-            {
-                printf("         \e[%im waiting MPI Broadcast from %d, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,r, rank, mpi_topology->num_servers,
-                world_rec_val, buffer); fflush(stdout);
-            }
+        MPI_Allreduce(&ret_val, &world_rec_val,1,MPI_INT,MPI_LAND, MPI_COMM_WORLD);
 
-			MPI_Bcast(
-			    &buffer,
-			    1,
-			    MPI_INT,
-			    r,
-			    MPI_COMM_WORLD);
+        printf(" >>>>>>>> locigal_and <<<<<<<< \e[%im   MPI_Allreduce passed, returning %s\e[39m\n ", mpi_topology->local_rank+32, world_rec_val? "true" : "false"); fflush(stdout);
 
-            world_rec_val*=buffer;  //if one of the receiving elements is 0, set world_rec_val to 0
-
-printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, buffer=%d\e[39m\n", mpi_topology->local_rank+32,rank, mpi_topology->num_servers,
-                world_rec_val, buffer); fflush(stdout);
-
-
-		}
-
-        MPI_Barrier(MPI_COMM_WORLD);
-        printf(" <<<<<<<< \e[%im  Barrier passed, rank %d of %d\e[39m\n", mpi_topology->local_rank+32,rank, mpi_topology->num_servers); fflush(stdout);
-		if(!world_rec_val) ret_val=false;
-        printf("  \e[%im stop reached: returning %s\e[39m\n", mpi_topology->local_rank+32, world_rec_val? "true" : "false"); fflush(stdout);
-        return ret_val;
+        if(world_rec_val) return true;
+        return false;
     }
 #endif
 
@@ -1010,9 +1030,11 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
         int grid_size  = graph_slice->nodes / block_size;
         if ((graph_slice->nodes % block_size)!=0) grid_size ++;
         if (grid_size > 512) grid_size = 512;
+        int keys[5];
 
         if (num_gpus > 1 && enactor_stats->iteration==0)
         {
+
             util::MemsetKernel<<<grid_size, block_size, 0, stream>>>(data_slice[0]->markers.GetPointer(util::DEVICE), (SizeT)0, graph_slice->nodes);
             frontier_attribute->queue_length = data_slice[0]->edge_map_queue_len;
             //util::cpu_mt::PrintGPUArray("keys", frontier_queue->keys[frontier_attribute->selector].GetPointer(util::DEVICE), frontier_attribute->queue_length, thread_num, enactor_stats->iteration, -1, stream);
@@ -1020,6 +1042,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
             //printf("Advance start.\n");fflush(stdout);
             frontier_attribute->queue_reset = true;
             // Edge Map
+CHECKPOINT_KEYS_PR
             gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrMarkerFunctor>(
                 //d_done,
                 enactor_stats[0],
@@ -1045,11 +1068,13 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
                 gunrock::oprtr::advance::V2V,
                 false,
                 true);
+CHECKPOINT_KEYS_PR
             //printf("Advance end.\n");fflush(stdout);
             //util::cpu_mt::PrintGPUArray("markers", data_slice[0]->markers.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
 
             for (peer_ = 0; peer_<num_gpus; peer_++)
                 util::MemsetKernel<<<128, 128, 0, stream>>> ( data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), 0, graph_slice->nodes);
+
             Assign_Marker_PR<VertexId, SizeT>
                 <<<grid_size, block_size, num_gpus * sizeof(SizeT*), stream>>> (
                 graph_slice->nodes,
@@ -1057,6 +1082,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
                 data_slice[0]->markers.GetPointer(util::DEVICE),
                 graph_slice->partition_table.GetPointer(util::DEVICE),
                 data_slice[0]->keys_markers.GetPointer(util::DEVICE));
+
             //for (peer_ = 0; peer_<num_gpus;peer_++)
             //    util::cpu_mt::PrintGPUArray("keys_marker0", data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
 
@@ -1067,6 +1093,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
                     (int)0, mgpu::plus<int>(), (int*)0, (int*)0,
                     (int*)(data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE)),
                     context[0]);
+
             //for (peer_ = 0; peer_<num_gpus;peer_++)
             //    util::cpu_mt::PrintGPUArray("keys_marker1", data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
 
@@ -1081,6 +1108,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
                 for (peer_ = 1; peer_<num_gpus; peer_++)
                     data_slice[0]->out_length[peer_] = 0;
             }
+
             if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
 
             for (peer_ = 0; peer_<num_gpus; peer_++)
@@ -1126,6 +1154,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
                 data_slice[0]->rank_next.GetPointer(util::DEVICE),
                 data_slice[0]->value__associate_out[peer_][0].GetPointer(util::DEVICE));
         }
+
         frontier_attribute->selector = data_slice[0]->PR_queue_selector;
         //for (peer_ = 1; peer_ < num_gpus; peer_++)
         //{
@@ -1133,6 +1162,7 @@ printf("         \e[%im MPI, after Broadcast, rank %d of %d, world_rec_val=%d, b
         //}
         if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
     }
+
 
 };
 
@@ -1311,13 +1341,14 @@ CHECKPOINT_RT
                         }
                     }
 
+                    void *** mpi_sendbuffer = (void***)malloc(sizeof(void**)*2*problem->mpi_topology->total_num_gpus);
 
                     MPI_PushNeighbor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
-                       problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num],
-                       0,
-                       0,
-                       99,
-                       0,
+                       problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num],//gpu
+                       0, // peer
+                       0, //original_peer
+                       99, //iteration
+                       0, //peer_server_idx
                        data_slice->local_nodes,
                        enactor_stats,
                    	   problem->data_slices [thread_num].GetPointer(util::HOST),
@@ -1327,19 +1358,18 @@ CHECKPOINT_RT
                        sent_requests,
                        req_size,
                        problem->mpi_ring_buffer->mpi_vertex_type,
-                       problem->mpi_ring_buffer->mpi_value__type
+                       problem->mpi_ring_buffer->mpi_value__type,
+                       mpi_sendbuffer
                        );
 
-
-
-					while(!MPI_Communication_Check(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global))
+					while(!MPI_Communication_Check(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global,mpi_sendbuffer))
 					{
 						sleep(0);
 					}
 
 		   		    for(int i=0; i<problem->mpi_topology->total_num_gpus; i++)
 		   		    {
-                        for(int g=0;i<problem->mpi_topology->total_num_gpus; g++){
+                        for(int g=0;g<problem->mpi_topology->total_num_gpus; g++){
                             free(sent_requests[i][g]);
                         }
                         free(req_size[i]);
@@ -1361,59 +1391,67 @@ CHECKPOINT_RT
                 {
                     for (int peer=1; peer<num_gpus_global; peer++)
                     {
-                    printf("peer = %d\n",peer); fflush(stdout);
-				    if (problem->mpi_topology->rank_of_gpu[peer]==0)
-                    { //the gpus on the local node
-                        if (markers[peer] == 0 && problem->data_slices[peer]->final_event_set)
-                        {
-                    	    markers[peer] =1 ;
-                    	    counter ++;
-                    	    problem->data_slices[peer]->final_event_set = false;
-                    	    int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
-                    	    cudaStreamWaitEvent(data_slice->streams[peer],
-                            	problem->data_slices[peer]->events[peer_iteration%4][1][0], 0);
-                    	    Expand_Incoming_Final<VertexId, SizeT, Value>
-                            	<<<128, 128, 0, data_slice->streams[peer]>>> (
-                        	    	problem->data_slices[peer]->local_nodes,
-                        	    	data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
-                        	    	data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
-                        	    	data_slice->rank_curr.GetPointer(util::DEVICE));
+                        printf("peer = %d\n",peer); fflush(stdout);
+#ifdef WITHMPI
+    				    if (problem->mpi_topology->rank_of_gpu[peer]==0)
+#endif
+                        { //the gpus on the local node
+                            if (markers[peer] == 0 && problem->data_slices[peer]->final_event_set)
+                            {
+                        	    markers[peer] =1 ;
+                        	    counter ++;
+                        	    problem->data_slices[peer]->final_event_set = false;
+                        	    int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
+                        	    cudaStreamWaitEvent(data_slice->streams[peer],
+                                	problem->data_slices[peer]->events[peer_iteration%4][1][0], 0);
+                        	    Expand_Incoming_Final<VertexId, SizeT, Value>
+                                	<<<128, 128, 0, data_slice->streams[peer]>>> (
+                            	    	problem->data_slices[peer]->local_nodes,
+                            	    	data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
+                            	    	data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
+                            	    	data_slice->rank_curr.GetPointer(util::DEVICE));
+                            }
                         }
-                    }
-					else
-					{
-                    	if (markers[peer] == 0)
-                    	{
-                    		markers[peer] = 1 ;
-                        	counter ++;
-                        	int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
+#ifdef WITHMPI
+    					else
+    					{
+                        	if (markers[peer] == 0)
+                        	{
+                        		markers[peer] = 1 ;
+                            	counter ++;
 
-							//copy from ring buffer to
-							printf("waiting for final data from peer %d, %s:%d\n", peer,__FILE__,__LINE__);
-							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
+    							//copy from ring buffer to
+    							printf("waiting for final data from peer %d, %s:%d\n", peer,__FILE__,__LINE__);
+                                while(problem->mpi_ring_buffer->all_done!=2){sleep(0);}
+    							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
+                                while(problem-> mpi_ring_buffer->fill_level[peer]>1){problem->mpi_ring_buffer->pop_back(peer);}
+    							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
 
-                            int buffer_pos = problem->mpi_ring_buffer->back_pos[peer];
 
-							MPI_buffer2receiving_device<PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
-								problem->mpi_ring_buffer,
-								peer,
-								peer,
-								enactor_stats,
-								problem->data_slices[0].GetPointer(util::HOST),
-								data_slice->streams[peer]);
+                                int buffer_pos = problem->mpi_ring_buffer->back_pos[peer];
+                                int msg_length = problem->mpi_ring_buffer->msg_length[peer][buffer_pos];
+                                printf("message length of last message %d\n",msg_length);
+    							MPI_buffer2receiving_device<PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
+    								problem->mpi_ring_buffer,
+    								peer,
+    								peer,
+    								enactor_stats,
+    								problem->data_slices[0].GetPointer(util::HOST),
+    								data_slice->streams[peer]);
 
-			                if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(data_slice->streams[peer]),
-			                        "cudaStreamSynchronize failed", __FILE__, __LINE__)) break;
+    			                if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(data_slice->streams[peer]),
+    			                        "cudaStreamSynchronize failed", __FILE__, __LINE__)) break;
 
-                        	Expand_Incoming_Final<VertexId, SizeT, Value>
-                            	<<<128, 128, 0, data_slice->streams[peer]>>> (
-                            		problem->data_slices[peer]->local_nodes,
-                            		data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
-                            		data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
-                            		data_slice->rank_curr.GetPointer(util::DEVICE));
+                            	Expand_Incoming_Final<VertexId, SizeT, Value>
+                                	<<<128, 128, 0, data_slice->streams[peer]>>> (
+                                		msg_length,
+                                		data_slice->keys_in[enactor_stats->iteration%2][peer].GetPointer(util::DEVICE),
+                                		data_slice->value__associate_in[enactor_stats->iteration%2][peer][0].GetPointer(util::DEVICE),
+                                		data_slice->rank_curr.GetPointer(util::DEVICE));
 
-                    	}
-					}
+                        	}
+    					}
+#endif
                     }
                 }
                 for (int peer=1; peer<num_gpus_local; peer++)
