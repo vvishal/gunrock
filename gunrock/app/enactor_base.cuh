@@ -898,7 +898,6 @@ printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);ff
 
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
 		printf("MPI loop set!\n");
-CHECKPOINT_RTT
 
 	    while(!mpi_ring_buffer->all_done || final_run)
 	    {
@@ -1168,10 +1167,6 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 	    int gpu                            =  thread_data -> thread_num;
 	#endif
 		int local_gpu                            =  thread_data -> thread_num;
-	printf("%s:%d problem-> data_slices -> [0]->PR_queue_length=%d\n",__FILE__,__LINE__,problem -> data_slices[0]->PR_queue_length);fflush(stdout);
-
-printf("\e[%imthread %d checkpoint %s:%d || gpu=%d; data_slice exist %s\e[39m\n", 32+problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, gpu,
-problem     -> data_slices ==NULL? "no" : "yes");fflush(stdout);
 
 	    DataSlice    *data_slice           =   problem     -> data_slices        [local_gpu].GetPointer(util::HOST);
 
@@ -1215,7 +1210,7 @@ problem     -> data_slices ==NULL? "no" : "yes");fflush(stdout);
 		int keys[3];
 
 	    printf("\e[%imIteration entered\e[39m\n",32+problem -> mpi_topology->local_rank);fflush(stdout);
-CHECKPOINT_RTT
+
 #ifdef WITHMPI
 		void *** mpi_sendbuffers = (void***)malloc(sizeof(void**)*2*num_gpu_global);
 	    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*num_gpu_global);
@@ -1350,7 +1345,6 @@ printf("**************** set to 0 again\n");
 	                        work_progress_      = &(work_progress              [peer_]);
 
 
-CHECKPOINT_RTL
 	                        if (Enactor::DEBUG && to_show[peer__])
 	                        {
 	                            mssg=" ";mssg[0]='0'+data_slice->wait_counter;
@@ -1365,7 +1359,6 @@ CHECKPOINT_RTL
 	                                                   mssg,
 	                                                   streams[peer__]);
 	                        }
-CHECKPOINT_RTL
 
 	                        to_show[peer__]=true;
 	                        switch (stages[peer__])
@@ -1515,10 +1508,9 @@ CHECKPOINT_RTL
 	                                        s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
 	                                        frontier_attribute_->queue_length = data_slice->in_length[iteration%2][peer_];
 	                                        data_slice->in_length[iteration%2][peer_]=0;
-											CHECKPOINT_RTT
+
 	                                        if (frontier_attribute_->queue_length ==0)  //check if actually data is in the input queue
 	                                        {
-												CHECKPOINT_RTT
 	                                            stages[peer__]=3;
 	                                            break;
 	                                        }
@@ -1531,7 +1523,6 @@ CHECKPOINT_RTL
 	                                        //    vertex_associate_orgs
 	                                        //    value__associate_orgs
 	                                        //
-											CHECKPOINT_RTT
 	                                        memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
 	                                               data_slice -> vertex_associate_ins[iteration%2][peer_].GetPointer(util::HOST),
 	                                               sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES);
@@ -1548,7 +1539,7 @@ CHECKPOINT_RTL
 	                                               data_slice -> value__associate_orgs.GetPointer(util::HOST),
 	                                               sizeof(Value*   ) * NUM_VALUE__ASSOCIATES);
 	                                        offset += sizeof(Value*   ) * NUM_VALUE__ASSOCIATES ;
-											CHECKPOINT_RTT
+
 											//wait until copy to GPU is completed
 											cudaStreamWaitEvent(streams[peer__],
 																s_data_slice[peer]->events[iteration_][gpu_][0], 0);
@@ -1559,7 +1550,6 @@ CHECKPOINT_RTL
 											cudaStreamSynchronize(streams[peer_]);
 										}
 
-										CHECKPOINT_RTT
 	                                    //copy from host to GPU
 	                                    data_slice->expand_incoming_array[peer_].Move(util::HOST, util::DEVICE, offset, 0, streams[peer_]);
 
@@ -1606,10 +1596,8 @@ if(1){float a[7];
 
 	                                    frontier_attribute_->selector^=1;
 	                                    frontier_attribute_->queue_index++;
-										CHECKPOINT_RTT
 
 	                                    if (!Iteration::HAS_SUBQ) { //if no subqueue, jump to stage 3 and indicate that stage 2 is ready
-											CHECKPOINT_RTT
 	                                        Set_Record(data_slice, iteration, peer_, 2, streams[peer__]);
 	                                        stages[peer__]=2;
 	                                    }
@@ -1619,7 +1607,6 @@ if(1){float a[7];
 	                                {
 	                                    if(problem->mpi_topology->rank_of_gpu[original_peer] != problem->mpi_topology->rank_of_gpu[gpu])  //if data has to be sent via MPI to another node
 	                                    {
-											CHECKPOINT_RTT
 	                                        //MPI_PUSH_NEIGHBOR
 	                                        MPI_PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
@@ -1650,7 +1637,6 @@ if(1){float a[7];
 	                                    }
 	                                    else //copy data on same node
 	                                    {
-											CHECKPOINT_RTT
 	                                        PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
 	                                        SizeT,
@@ -1675,7 +1661,6 @@ if(1){float a[7];
 	                                        // the following line means set s_data_slice[gpu]->set_event[iteration%4][peer_][0]=true
 	                                        Set_Record(data_slice, iteration, peer_, stages[peer__], streams[peer__]);
 	                                    }
-										CHECKPOINT_RTT
 	                                    stages[peer__]=3;
 	                                }
 	                                break;
@@ -2106,7 +2091,7 @@ if(1){float a[7];
 	                                                            graph_slice);
 
 	                            }
-								if(1){float a[7];
+								if(VFDEBUG){float a[7];
 									cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
 									printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
 								}
@@ -2125,7 +2110,7 @@ if(1){float a[7];
 	                                                      context[peer_],
 	                                                      streams[peer_]);
 
-								if(1){float a[7];
+								if(VFDEBUG){float a[7];
 									cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
 									printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
 									if (enactor_stats_->retval) printf("retval!=cudaSuccess\n") ;
@@ -2150,16 +2135,16 @@ if(1){float a[7];
 	                        frontier_queue_ = &(data_slice->frontier_queues[Enactor::SIZE_CHECK?0:num_gpu_global]);
 	                        if (num_gpu_global==1) data_slice->out_length[0]=Total_Length;
 	                    }
-CHECKPOINT_KEYS
+
 						util::GRError(true);
-						if(1){float a[7];
+						if(VFDEBUG){float a[7];
 							cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
 							printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
 						}
-						CHECKPOINT_KEYS
+
 	                    if (num_gpu_global > 1)
 	                    {
-							CHECKPOINT_KEYS
+
 	                        Iteration::Iteration_Update_Preds(
 	                                                          graph_slice,
 	                                                          data_slice,
@@ -2167,13 +2152,7 @@ CHECKPOINT_KEYS
 	                                                          &data_slice->frontier_queues[Enactor::SIZE_CHECK?0:num_gpu_global],
 	                                                          Total_Length,
 	                                                          streams[0]);
-							CHECKPOINT_KEYS
-
-				int * keysbackup=(int*)malloc(sizeof(int)*graph_slice  ->nodes);
-				cudaMemcpy(keysbackup, data_slice->frontier_queues[0].keys[0].GetPointer(util::DEVICE), sizeof(int)*graph_slice->nodes, cudaMemcpyDeviceToHost);
-
-
-	                        Iteration::template Make_Output <NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
+							Iteration::template Make_Output <NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
 	                                                                                                        local_gpu,
 	                                                                                                        Total_Length,
 	                                                                                                        num_gpu_global,
@@ -2187,21 +2166,18 @@ CHECKPOINT_KEYS
 	                                                                                                        context[0],
 	                                                                                                        streams[0]);
 
-			//	cudaMemcpy(data_slice->frontier_queues[0].keys[0].GetPointer(util::DEVICE),keysbackup , sizeof(int)*graph_slice->nodes, cudaMemcpyHostToDevice);
-			//	cudaMemcpy(data_slice->frontier_queues[1].keys[0].GetPointer(util::DEVICE),keysbackup , sizeof(int)*graph_slice->nodes, cudaMemcpyHostToDevice);
-				free(keysbackup);
-	CHECKPOINT_KEYS
+
 	                    } else data_slice->out_length[0]= Total_Length;
-						CHECKPOINT_KEYS
-						if(1){float a[7];
+
+						if(VFDEBUG){float a[7];
 							cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
 							printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
 						}
-						CHECKPOINT_KEYS
+
 						util::GRError(true);
 	                    for (peer_=0;peer_<num_gpu_global;peer_++)
 	                        frontier_attribute[peer_].queue_length = data_slice->out_length[peer_];
-						CHECKPOINT_KEYS
+
 	                }
 	            Iteration::Iteration_Change(enactor_stats->iteration);
 	        }

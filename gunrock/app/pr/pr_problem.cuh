@@ -120,7 +120,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
         {
             cudaError_t retval = cudaSuccess;
             SizeT       nodes  = graph->nodes;
-CHECKPOINT
+
             /*if (num_gpus > 1)
             {
                 //_num_in_nodes = new  SizeT[num_gpus+1];
@@ -141,7 +141,7 @@ CHECKPOINT
                 num_in_nodes,
                 num_out_nodes,
                 in_sizing)) return retval;
-CHECKPOINT
+
             temp_keys_out = new util::Array1D<SizeT, VertexId>[num_gpus];
             if (num_gpus > 1)
             {
@@ -167,7 +167,7 @@ CHECKPOINT
                 //if (retval = this->value__associate_outs[peer_].Move(util::HOST, util::DEVICE)) return retval;
             }
             this->keys_outs.Move(util::HOST, util::DEVICE);
-CHECKPOINT
+
             // Create SoA on device
             if (retval = rank_curr   .Allocate(nodes, util::DEVICE)) return retval;
             if (retval = rank_next   .Allocate(nodes, util::DEVICE)) return retval;
@@ -333,7 +333,7 @@ CHECKPOINT
                 this->graph_slices[gpu]->out_counter[peer_] = max_nodes;
             }
         }
-CHECKPOINT
+
         do {
             for (int gpu=0; gpu<this->num_gpus; gpu++)
             {
@@ -355,7 +355,7 @@ CHECKPOINT
                     in_sizing)) return retval;
             }
         } while (0);
-CHECKPOINT
+
         delete[] local_nodes; local_nodes = NULL;
         return retval;
     }
@@ -412,7 +412,7 @@ CHECKPOINT
            partition_seed);
 
        // No data in DataSlice needs to be copied from host
-       CHECKPOINT
+       
        /**
         * Allocate output labels/preds
         */
@@ -482,7 +482,7 @@ CHECKPOINT
        this -> mpi_ring_buffer->initBarrier(num_gpus_local);
 
        delete[] local_nodes; local_nodes = NULL;
-CHECKPOINT
+
        return retval;
    }
 
@@ -584,7 +584,6 @@ CHECKPOINT
                 if (retval = data_slices[gpu]->frontier_queues[0].keys[0].EnsureSize(nodes)) return retval;
                 util::MemsetIdxKernel<<<128, 128>>>(data_slices[gpu]->frontier_queues[0].keys[0].GetPointer(util::DEVICE), nodes);
             } else {
-              CHECKPOINT
                 data_slices[gpu]->degrees_pong.SetPointer(this->org_graph->row_offsets, nodes+1, util::HOST);
                 data_slices[gpu]->degrees_pong.Move(util::HOST, util::DEVICE);
                 util::MemsetMadVectorKernel <<<128, 128>>>(
@@ -625,9 +624,9 @@ CHECKPOINT
 //printf("%s:%d ==== data_slices[%d]->PR_queue_length = %d;\n",__FILE__,__LINE__,gpu,data_slices[gpu]->PR_queue_length);
             if (retval = data_slices[gpu].Move(util::HOST, util::DEVICE)) return retval;
         }
-CHECKPOINT
+
         delete[] temp_in_counter; temp_in_counter = NULL;
-CHECKPOINT
+
         return retval;
     }
 

@@ -38,15 +38,7 @@
 #include <mpi.h>
 #endif
 
-#define CHECKPOINT printf("checkpoint %s:%d\n",__FILE__,__LINE__);fflush(stdout);
-#define CHECKPOINT_RT ;//printf("rank/thread %d/%d checkpoint %s:%d\n", problem -> mpi_topology->local_rank,thread_num,__FILE__,__LINE__);fflush(stdout);
-#define CHECKPOINT_RTT ;//printf("\e[%imrank/thread %d/%d checkpoint %s:%d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__);fflush(stdout);
-#define CHECKPOINT_RTL //;printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 32+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
-#define CHECKPOINT_RTL2 printf("\e[%imrank/thread %d/%d checkpoint %s:%d, %d\e[39m\n", 34+problem -> mpi_topology->local_rank,problem -> mpi_topology->local_rank,thread_data -> thread_num,__FILE__,__LINE__, enactor_stats_->retval);fflush(stdout);
-#define CHECKPOINT_KEYS cudaMemcpy(&keys, data_slice->frontier_queues[0].keys[0].GetPointer(util::DEVICE), sizeof(int)*3, cudaMemcpyDeviceToHost);printf("data_slice->frontier_queues[0]->keys[0] %i %i %i (line:%i)\n",keys[0],keys[1],keys[2],__LINE__);
-#define CHECKPOINT_KEYS_PR cudaMemcpy(&keys, frontier_queue->keys[0].GetPointer(util::DEVICE), sizeof(int)*3, cudaMemcpyDeviceToHost);printf("frontier_queue->keys[0] %i %i %i (line:%i)\n",keys[0],keys[1],keys[2],__LINE__);
-
-
+#define VFDEBUG 1
 
 namespace gunrock {
 namespace app {
@@ -1509,7 +1501,8 @@ namespace app {
            int num_gpus_global = mpi_topology->total_num_gpus;
 
            if(gpu_idx_local==NULL){
-               CHECKPOINT
+               printf("PROBLEM!\n");
+               exit(0);
            }else{
                printf("local_gpu=%d, start_offset=%d, num_local_gpus=%d\n",gpu_idx_local[0],local_gpu_idx_start,num_gpus_local);
            }

@@ -1030,7 +1030,6 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
         int grid_size  = graph_slice->nodes / block_size;
         if ((graph_slice->nodes % block_size)!=0) grid_size ++;
         if (grid_size > 512) grid_size = 512;
-        int keys[5];
 
         if (num_gpus > 1 && enactor_stats->iteration==0)
         {
@@ -1042,7 +1041,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
             //printf("Advance start.\n");fflush(stdout);
             frontier_attribute->queue_reset = true;
             // Edge Map
-CHECKPOINT_KEYS_PR
+
             gunrock::oprtr::advance::LaunchKernel<AdvanceKernelPolicy, Problem, PrMarkerFunctor>(
                 //d_done,
                 enactor_stats[0],
@@ -1068,7 +1067,7 @@ CHECKPOINT_KEYS_PR
                 gunrock::oprtr::advance::V2V,
                 false,
                 true);
-CHECKPOINT_KEYS_PR
+
             //printf("Advance end.\n");fflush(stdout);
             //util::cpu_mt::PrintGPUArray("markers", data_slice[0]->markers.GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
 
@@ -1232,10 +1231,10 @@ CHECKPOINT_KEYS_PR
 
             if (enactor_stats[0].retval = util::SetDevice(gpu_idx)) break;
             thread_data->stats = 1;
-CHECKPOINT_RT
+
             while (thread_data->stats !=2) sleep(0); //busy wait until EnactPR is waiting (line ~1640)
             thread_data->stats = 3;
-CHECKPOINT_RT
+
             for (int peer_=0; peer_<num_gpus_global; peer_++)
             {
                 frontier_attribute[peer_].queue_length  = peer_==0?data_slice->local_nodes : 0;
@@ -1246,7 +1245,7 @@ CHECKPOINT_RT
             }
             //gunrock::app::Iteration_Loop
             //    <0, 0, PrEnactor, PrFunctor, R0DIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
-CHECKPOINT_RT
+
             data_slice->PR_queue_selector = frontier_attribute[0].selector; //TODO: make MPI compatible
             //for (int peer_=0; peer_<num_gpus; peer_++)
             //{
@@ -1255,11 +1254,11 @@ CHECKPOINT_RT
             //}
             if (num_gpus_global > 1)
             {
-CHECKPOINT_RT
+
                 data_slice->value__associate_orgs[0] = data_slice->rank_next.GetPointer(util::DEVICE);
-CHECKPOINT_RT
+
                 data_slice->value__associate_orgs.Move(util::HOST, util::DEVICE);
-CHECKPOINT_RT
+
                 //util::cpu_mt::IncrementnWaitBarrier(cpu_barrier, thread_num);
                 //for (int i=0; i<4; i++)
                 //for (int gpu=0; gpu<num_gpus; gpu++)
@@ -1267,10 +1266,10 @@ CHECKPOINT_RT
                 //    data_slice->events_set[i][gpu][stage] = false;
                 //util::cpu_mt::IncrementnWaitBarrier(cpu_barrier+1, thread_num);
             }
-            CHECKPOINT_RT
+
             data_slice -> edge_map_queue_len = frontier_attribute[0].queue_length;
             //util::cpu_mt::PrintGPUArray("degrees", data_slice->degrees.GetPointer(util::DEVICE), graph_slice->nodes, thread_num);
-CHECKPOINT_RT
+
             // Step through PR iterations
             gunrock::app::Iteration_Loop
                 <0, 1, PrEnactor, PrFunctor, PRIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
@@ -1470,7 +1469,7 @@ CHECKPOINT_RT
             }
 
         } while(0);
-CHECKPOINT_RT
+
         printf("PR_Thread finished\n");fflush(stdout);
         thread_data->stats = 4;
         CUT_THREADEND;
@@ -1664,7 +1663,7 @@ public:
                     (void*)&(thread_slices[gpu]));
             thread_Ids[gpu] = thread_slices[gpu].thread_Id;
         }
-CHECKPOINT
+
 #ifdef WITHMPI
                 thread_slices[num_gpus_local].cpu_barrier  = cpu_barrier;
                 thread_slices[num_gpus_local].thread_num   = num_gpus_local;                            //assign thread id to gpu id
@@ -1705,7 +1704,6 @@ CHECKPOINT
         do {
             for (int gpu=0; gpu< this->num_gpus_local; gpu++)
             {
-                CHECKPOINT
                 while (thread_slices[gpu].stats!=1) sleep(0);
                 thread_slices[gpu].stats=2;
             }
@@ -1840,7 +1838,6 @@ printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enact
         int min_sm_version = -1;
         for (int gpu=0; gpu<this->num_gpus_local; gpu++)
         {
-            CHECKPOINT
             if (min_sm_version == -1 || this->cuda_props[gpu].device_sm_version < min_sm_version)
                 min_sm_version = this->cuda_props[gpu].device_sm_version;
         }
