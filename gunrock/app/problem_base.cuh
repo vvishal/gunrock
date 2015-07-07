@@ -319,6 +319,7 @@ namespace app {
        int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
        int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
        int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
+       int * global_to_device_idx         ;   // gives for the global gpu number the device id of that GPU on the node
        int total_num_gpus                 ;   // the total number of GPUs
        int local_rank                     ;   // the local MPI rank
 

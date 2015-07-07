@@ -286,7 +286,6 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
             Csr<VertexId, Value, SizeT>
                          *inversgraph      = NULL,
             int           num_gpus         = 1,
-            int           num_gpus_global  = 1,
             int          *gpu_idx          = NULL,
             std::string   partition_method = "random",
             cudaStream_t *streams          = NULL,
@@ -386,20 +385,20 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
            int           partition_seed   = -1)
    {
 
-     int num_gpus_global = mpi_topology -> total_num_gpus;
-	   int rank            = mpi_topology -> local_rank;
-	   int num_gpus_local  = mpi_topology -> num_gpus_per_server[rank];
-	   int * local_gpu_idx = mpi_topology -> local_gpu_mapping[rank];
+        int num_gpus_global = mpi_topology -> total_num_gpus;
+    	int rank            = mpi_topology -> local_rank;
+    	int num_gpus_local  = mpi_topology -> num_gpus_per_server[rank];
+    	int * local_gpu_idx = mpi_topology -> local_gpu_mapping[rank];
 
-	   int start_gpu_index = 0;
+        int start_gpu_index = 0;
 
-	   for(int i=0;i<rank;i++)
-	   {
-		   start_gpu_index += mpi_topology -> num_gpus_per_server[i];
-	   }
+    	for(int i=0;i<rank;i++)
+    	{
+    		start_gpu_index += mpi_topology -> num_gpus_per_server[i];
+    	}
 
 
-       ProblemBase<VertexId, SizeT, Value, true, false, false, false, false, true> :: Init(
+        ProblemBase<VertexId, SizeT, Value, true, false, false, false, false, true> :: Init(
            stream_from_host,
            graph,
            inversgraph,
@@ -412,7 +411,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
            partition_seed);
 
        // No data in DataSlice needs to be copied from host
-       
+
        /**
         * Allocate output labels/preds
         */

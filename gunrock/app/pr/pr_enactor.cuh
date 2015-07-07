@@ -1246,7 +1246,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
             //gunrock::app::Iteration_Loop
             //    <0, 0, PrEnactor, PrFunctor, R0DIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
 
-            data_slice->PR_queue_selector = frontier_attribute[0].selector; //TODO: make MPI compatible
+            data_slice->PR_queue_selector = frontier_attribute[0].selector;
             //for (int peer_=0; peer_<num_gpus; peer_++)
             //{
             //    frontier_attribute[peer_].queue_reset = true;
@@ -1722,7 +1722,9 @@ printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enact
                 if (this->enactor_stats[gpu].retval!=cudaSuccess)
                 {retval=this->enactor_stats[gpu].retval;break;}
         } while (0);
+#ifdef WITHMPI
 		problem->mpi_ring_buffer->all_done = 1; //stop MPI communication loop
+#endif
         if (this->DEBUG) printf("\nGPU PR Done.\n");
         return retval;
     }

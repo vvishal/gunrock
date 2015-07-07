@@ -2280,7 +2280,7 @@ if(1){float a[7];
 	        for(int j=0; j<topol.num_gpus_per_server[i]; j++)
 	        {
 	            topol.rank_of_gpu[offset]=i;
-				topol.global_to_device_idx = (int)gpu_mapping[i][j].first;
+		    topol.global_to_device_idx[offset] = (int)gpu_mapping[i][j].first;
 	            offset++;
 	            topol.local_gpu_mapping[i][j] = (int)gpu_mapping[i][j].first;
 	            topol.global_gpu_maping[i][j] = (int)gpu_mapping[i][j].second;
