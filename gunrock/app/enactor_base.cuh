@@ -1162,8 +1162,8 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer;
 	#else
 	    int rank                           =  0;
-	    //int num_gpu_local                  =  problem -> num_gpu;
-	    int num_gpu_global                 =  problem -> num_gpu;
+	    //int num_gpu_local                  =  problem -> num_gpus;
+	    int num_gpu_global                 =  problem -> num_gpus;
 	    int gpu                            =  thread_data -> thread_num;
 	#endif
 		int local_gpu                            =  thread_data -> thread_num;
@@ -1206,12 +1206,11 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 	    *scanned_edges_       =   NULL;
 	    int           peer, peer_, peer__, gpu_, i, iteration_, wait_count, original_peer;
 	    bool          over_sized;
-		//check keys
-		int keys[3];
 
-	    printf("\e[%imIteration entered\e[39m\n",32+problem -> mpi_topology->local_rank);fflush(stdout);
+
 
 #ifdef WITHMPI
+		printf("\e[%imIteration entered\e[39m\n",32+problem -> mpi_topology->local_rank);fflush(stdout);
 		void *** mpi_sendbuffers = (void***)malloc(sizeof(void**)*2*num_gpu_global);
 	    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*num_gpu_global);
 		int **sent_request_size = (int**)malloc(sizeof(int*)*num_gpu_global);
@@ -1241,7 +1240,7 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 printf("**************** set to 0 once\n");
 	    while (!problem->mpi_ring_buffer->all_done)
 #else
-	    while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
+	    while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global))
 #endif
 	        {
 
@@ -1286,7 +1285,7 @@ printf("**************** set to 0 again\n");
 	            while (data_slice->wait_counter < num_gpu_global*2 && !problem->mpi_ring_buffer->all_done)
 #else
 	                while (data_slice->wait_counter < num_gpu_global*2
-	                       && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local)))
+	                       && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global)))
 #endif
 	                {
 	                    for (peer__=0; peer__<num_gpu_global*2; peer__++)
@@ -1904,7 +1903,7 @@ if(1){float a[7];
 #ifdef WITHMPI
 	            if (!mpi_ring_buffer->all_done)
 #else
-	                if (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
+	                if (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global))
 #endif
 	                {
 	                    for (peer_=0;peer_<num_gpu_global*2;peer_++)
@@ -1916,7 +1915,7 @@ if(1){float a[7];
 
 #else
 	                        while (wait_count<num_gpu_global*2-1 &&
-	                               !Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus_local))
+	                               !Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global))
 #endif
 	                        {
 	                            for (peer_=0;peer_<num_gpu_global*2;peer_++)
@@ -2091,10 +2090,6 @@ if(1){float a[7];
 	                                                            graph_slice);
 
 	                            }
-								if(VFDEBUG){float a[7];
-									cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
-									printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
-								}
 
 	                            Iteration::FullQueue_Core(
 	                                                      thread_data -> thread_num,
@@ -2110,11 +2105,7 @@ if(1){float a[7];
 	                                                      context[peer_],
 	                                                      streams[peer_]);
 
-								if(VFDEBUG){float a[7];
-									cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
-									printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
-									if (enactor_stats_->retval) printf("retval!=cudaSuccess\n") ;
-								}
+
 	                            if (enactor_stats_->retval) break;
 								util::GRError(true);
 	                            if (!Enactor::SIZE_CHECK)
@@ -2137,10 +2128,7 @@ if(1){float a[7];
 	                    }
 
 						util::GRError(true);
-						if(VFDEBUG){float a[7];
-							cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
-							printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
-						}
+
 
 	                    if (num_gpu_global > 1)
 	                    {
@@ -2169,10 +2157,6 @@ if(1){float a[7];
 
 	                    } else data_slice->out_length[0]= Total_Length;
 
-						if(VFDEBUG){float a[7];
-							cudaMemcpy(&a,(float*)(data_slice->rank_next.GetPointer(util::DEVICE)),7*sizeof(float),cudaMemcpyDeviceToHost);
-							printf("intermediate values %f %f %f %f %f %f %f (line %d)\n",a[0],a[1],a[2],a[3],a[4],a[5],a[6],__LINE__);
-						}
 
 						util::GRError(true);
 	                    for (peer_=0;peer_<num_gpu_global;peer_++)
@@ -2280,11 +2264,12 @@ if(1){float a[7];
 
 	    struct gunrock::app::GPU_Topology topol;
 	    topol.num_servers = (int)gpu_mapping.size();
-	    topol.num_gpus_per_server = (int  *)malloc(sizeof(int)*topol.num_servers);
-	    topol.rank_of_gpu         = (int  *)malloc(sizeof(int)*global_gpu_nr);
-	    topol.local_gpu_mapping   = (int **)malloc(sizeof(int*)*topol.num_servers);
-	    topol.global_gpu_maping   = (int **)malloc(sizeof(int*)*topol.num_servers);
-	    topol.total_num_gpus      = global_gpu_nr;
+	    topol.num_gpus_per_server  = (int  *)malloc(sizeof(int)*topol.num_servers);
+	    topol.rank_of_gpu          = (int  *)malloc(sizeof(int)*global_gpu_nr);
+	    topol.local_gpu_mapping    = (int **)malloc(sizeof(int*)*topol.num_servers);
+	    topol.global_gpu_maping    = (int **)malloc(sizeof(int*)*topol.num_servers);
+		topol.global_to_device_idx = (int  *)malloc(sizeof(int)*global_gpu_nr);
+	    topol.total_num_gpus       = global_gpu_nr;
 	    int offset=0;
 	    for(int i=0;i<topol.num_servers; i++)
 	    {
@@ -2295,6 +2280,7 @@ if(1){float a[7];
 	        for(int j=0; j<topol.num_gpus_per_server[i]; j++)
 	        {
 	            topol.rank_of_gpu[offset]=i;
+				topol.global_to_device_idx = (int)gpu_mapping[i][j].first;
 	            offset++;
 	            topol.local_gpu_mapping[i][j] = (int)gpu_mapping[i][j].first;
 	            topol.global_gpu_maping[i][j] = (int)gpu_mapping[i][j].second;
@@ -2676,11 +2662,10 @@ if(1){float a[7];
 	                               FrontierAttribute<SizeT>      *frontier_attribute,
 	                               util::Array1D<SizeT, DataSlice>
 	                               *data_slice,
-	                               int                            num_gpus_local,
-	                               int                            num_gpus_global
+	                               int                            num_gpus
 	                               )
 	    {
-	        return All_Done(enactor_stats, frontier_attribute, data_slice, num_gpus_local, num_gpus_global);
+	        return All_Done(enactor_stats, frontier_attribute, data_slice, num_gpus, num_gpus);
 	    }
 
 	    static void Iteration_Change(long long &iterations)
