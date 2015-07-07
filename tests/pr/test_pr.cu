@@ -1,3 +1,4 @@
+
 // ----------------------------------------------------------------
 // Gunrock -- Fast and Efficient GPU Graph Library
 // ----------------------------------------------------------------
@@ -493,7 +494,7 @@ void RunTests(Test_Parameter *parameter)
     }
 
 	// Allocate PageRank enactor map
-	PrEnactor* enactor = new PrEnactor(num_gpus, parameter -> num_gpus_global, gpu_idx);
+	PrEnactor* enactor = new PrEnactor(num_gpus, gpu_idx);
 
 
     // Allocate problem on GPU
@@ -522,31 +523,51 @@ void RunTests(Test_Parameter *parameter)
 
 #endif
 
-CHECKPOINT
+
     // Perform PageRank
     CpuTimer cpu_timer;
 
     for (int iter = 0; iter < iterations; ++iter)
     {
-CHECKPOINT
+
         util::GRError(problem->Reset(src, delta, error, max_iter, enactor->GetFrontierType(), max_queue_sizing), "pr Problem Data Reset Failed", __FILE__, __LINE__);
         util::GRError(enactor->Reset(), "PR Enactor Reset Reset failed", __FILE__, __LINE__);
-CHECKPOINT
+
         printf("_________________________________________\n");fflush(stdout);
         cpu_timer.Start();
-        CHECKPOINT
+
         util::GRError(enactor->Enact(traversal_mode), "pr Problem Enact Failed", __FILE__, __LINE__);
-        CHECKPOINT
+
         cpu_timer.Stop();
         printf("-----------------------------------------\n");fflush(stdout);
         elapsed += cpu_timer.ElapsedMillis();
     }
     elapsed /= iterations;
-CHECKPOINT
+
     enactor->GetStatistics(total_queued, avg_duty, num_iter);
-CHECKPOINT
+
     // Copy out results
+#ifdef WITHMPI
+    if(parameter -> mpi_topology -> local_rank == 0)
+    {
+        util::GRError(problem->Extract(gpu_idx[0],h_rank, h_node_id), "PageRank Problem Data Extraction Failed", __FILE__, __LINE__);
+    }
+    else
+    {
+        if (stats      ) {delete   stats      ; stats       = NULL;}
+        if (org_size   ) {delete   org_size   ; org_size    = NULL;}
+        if (problem    ) {delete   problem    ; problem     = NULL;}
+        if (enactor    ) {delete   enactor    ; enactor     = NULL;}
+        if (ref_rank   ) {delete[] ref_rank   ; ref_rank    = NULL;}
+        if (ref_node_id) {delete[] ref_node_id; ref_node_id = NULL;}
+        if (h_rank     ) {delete[] h_rank     ; h_rank      = NULL;}
+        if (h_node_id  ) {delete[] h_node_id  ; h_node_id   = NULL;}
+        MPI_Finalize();
+        return;
+    }
+#else
     util::GRError(problem->Extract(h_rank, h_node_id), "PageRank Problem Data Extraction Failed", __FILE__, __LINE__);
+#endif
 
     float total_pr = 0;
     for (int i = 0; i < graph->nodes; ++i)
@@ -686,6 +707,7 @@ CHECKPOINT
     if (h_node_id  ) {delete[] h_node_id  ; h_node_id   = NULL;}
 
     //cudaDeviceSynchronize();
+    MPI_Finalize();
 }
 
 template <
