@@ -575,7 +575,7 @@ o8o        o888o o888o        o888o ooooooooooo o888o         `V88V"V8P' 8""888P
 		    {
 				sendbuffer[sent_flag_counter] = (Value*)malloc(queue_length*sizeof(Value));
 				cudaError_t rv = cudaMemcpy(sendbuffer[sent_flag_counter],data_slice_l->value__associate_outs[peer_][j],queue_length*sizeof(Value),cudaMemcpyDeviceToHost);
-
+                printf("cudaMemcpy return value %s\n",rv==cudaSuccess? "cudaSuccess":"cuda Error"); fflush(stdout);
 		        if(MPI_SUCCESS != MPI_Isend(
 		                                    sendbuffer[sent_flag_counter],//data_slice_l->value__associate_outs[peer_][j],
 		                                    queue_length*sizeof(Value),
@@ -590,11 +590,6 @@ o8o        o888o o888o        o888o ooooooooooo o888o         `V88V"V8P' 8""888P
 		        }
 		        sent_flag_counter++;
 		    }
-			int a[3];
-			float b[3];
-			cudaMemcpy(&a,data_slice_l -> keys_out[peer_].GetPointer(util::DEVICE),sizeof(VertexId) * 3, cudaMemcpyDeviceToHost);
-			cudaMemcpy(&b,data_slice_l->value__associate_outs[peer_][0],sizeof(Value) * 3, cudaMemcpyDeviceToHost);
-			printf("\e[%im Sending %d:%f ; %d:%f ; %d:%f ... to peer %i \e[39m\n",32+gpu,a[0],b[0],a[1],b[1],a[2],b[2],peer);
 
 		}else{
 			printf("empty message sent to %i\n",peer_server_idx); fflush(stdout);
@@ -853,7 +848,7 @@ o8o        o888o o888o        o888o ooooooooooo  `Y8bood8P'  `Y8bod8P' o888o o88
 	    int num_gpu_global                 =  problem -> mpi_topology -> total_num_gpus;
 
 	    int gpu                            =  problem -> mpi_topology -> global_gpu_maping[rank][thread_data -> thread_num];
-	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer;
+	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> ** all_mpi_ring_buffers =  problem -> mpi_ring_buffer;
 
 	    /* util::Array1D<SizeT, DataSlice>
 	     *s_data_slice         =   problem     -> data_slices; */
@@ -874,13 +869,18 @@ o8o        o888o o888o        o888o ooooooooooo  `Y8bood8P'  `Y8bod8P' o888o o88
 		printf("MPI loop ready!\n");
 		int final_run=0;
 
-printf("%s:%d problem-> data_slices -> [0]->PR_queue_length=%d\n",__FILE__,__LINE__,problem -> data_slices[0]->PR_queue_length);fflush(stdout);
-		mpi_ring_buffer->all_done=Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+
+		int all_done = Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+		for(int g=0; g<num_gpu_local; g++)
+		{
+			all_mpi_ring_buffers[g]->all_done=all_done;
+		}
+		
 		//set the checked variable to release the Iteration_Loop threads
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
 		for(int g=0; g<num_gpu_local; g++)
 		{
-			mpi_ring_buffer->checked[g]=3;
+			all_mpi_ring_buffers[g]->checked=3;
 		}
 
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
@@ -888,7 +888,7 @@ printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);ff
 		while(!threads_released){
 			threads_released=1;
 			for(int g=0;g<num_gpu_local; g++){
-				if(mpi_ring_buffer->checked[g]==3)
+				if(all_mpi_ring_buffers[g]->checked==3)
 				{
 					threads_released=0;
 				}
@@ -899,22 +899,26 @@ printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);ff
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
 		printf("MPI loop set!\n");
 
-	    while(!mpi_ring_buffer->all_done || final_run)
+	    while(!all_done || final_run)
 	    {
-			mpi_ring_buffer->all_done = Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+			all_done = Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, problem -> mpi_topology);
+			for(int g=0; g<num_gpu_local; g++)
+			{
+				all_mpi_ring_buffers[g]->all_done=all_done;
+			}			
 			//set the checked variable to release the Iteration_Loop threads
 			for(int g=0; g<num_gpu_local; g++)
 			{
-				mpi_ring_buffer->checked[g]=2;
+				all_mpi_ring_buffers[g]->checked=2;
 			}
-			if(mpi_ring_buffer->all_done && rank!=0) return;
+			if(all_done && rank!=0) return;
 
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
 			int threads_released=0;
-			while(!threads_released && !mpi_ring_buffer->all_done){
+			while(!threads_released && !all_done){
 				threads_released=1;
 				for(int g=0;g<num_gpu_local; g++){
-					if(mpi_ring_buffer->checked[g]==2)
+					if(all_mpi_ring_buffers[g]->checked==2)
 					{
 						threads_released=0;
 					}
@@ -923,7 +927,8 @@ printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);ff
 			}
 			printf("MPI loop go!\n");
 printf("===========value now %d: %d\n",__LINE__, mpi_ring_buffer->checked[0]);fflush(stdout);
-printf("mpi_ring_buffer->all_done = %s\n",mpi_ring_buffer->all_done ? "TRUE" : "FALSE");fflush(stdout);
+printf("all_done = %s\n",all_done ? "TRUE" : "FALSE");fflush(stdout);
+
 	        int recv_counter = problem->mpi_topology->num_servers-1;
 
 	        //for all peers, do a blocking call to wait for the header first and then the data
@@ -932,9 +937,7 @@ printf("mpi_ring_buffer->all_done = %s\n",mpi_ring_buffer->all_done ? "TRUE" : "
 	            int header[4];
 	            MPI_Status status;
 
-printf("while(recv_counter!=0){ with recv_counter=%d\n",recv_counter);fflush(stdout);
-
-printf("waiting to receive message\n");
+				printf("waiting to receive message %i more messages\n",recv_counter);
 
 
 				int mpi_ret_val = MPI_Recv(&header[0], header_length, MPI_INT, MPI_ANY_SOURCE, HEADER_MPI_TAG, MPI_COMM_WORLD,&status);
@@ -953,20 +956,20 @@ printf("waiting to receive message\n");
 				}
 				*/
 
-
 	            int sender_rank     = status.MPI_SOURCE;
 	            int sender_gpu      = header[0];
-	            //int sender_iter     = header[1];
-	            int sender_msg_len  = header[2];
-	            //int gpu_            = header[3];
+				int target_gpu      = header[1];
+	            //int sender_iter     = header[2];
+	            int sender_msg_len  = header[3];
+	            //int gpu_            = header[4];
 	            //header successfully received
 	            if(Enactor::DEBUG)
 	            {
-	                printf("Incoming message from %i: [%i, %i, %i, %i] ",sender_rank, header[0], header[1], header[2], header[3]);
+	                printf("Incoming message from rank %i: [from gpu %i, for gpu %i, iter %i, length %i, %i] ",sender_rank, header[0], header[1], header[2], header[3], header[3]);
 	            }
 
 	            //int peer_ = sender_gpu<gpu? sender_gpu+1 : sender_gpu;
-
+				struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffers=all_mpi_ring_buffers[target_gpu];
 
 	            //check for buffer overflow
 	            int incoming_ring_buffer_pos     = mpi_ring_buffer->front_pos[sender_gpu];
@@ -1040,14 +1043,14 @@ printf("waiting to receive message\n");
 				mpi_ring_buffer->front_pos[sender_gpu] = incoming_ring_buffer_pos_new;
 				mpi_ring_buffer->fill_level[sender_gpu]++;
 
-printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[sender_gpu],sender_gpu);
+				printf("MPI ring buffer of GPU %d set to %d for peer %d\n",target_gpu, mpi_ring_buffer->front_pos[sender_gpu],sender_gpu);
 	            recv_counter--;
 	        }
 
 	    }
 		if(!final_run==0)
 		{
-			if(mpi_ring_buffer->all_done == 1)
+			if(all_done == 1)
 			{
 				;
 				// we need to keep the communication loop running for one more iteration on rank 0
@@ -1059,8 +1062,12 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 		{
 			final_run=0;
 		}
-		mpi_ring_buffer->all_done=2;
+		for(int g=0; g<num_gpu_local; g++)
+		{
+			all_mpi_ring_buffers[g]->all_done=2;
+		}
 	}
+
 
 	template <
 	bool     SIZE_CHECK,
@@ -1159,7 +1166,7 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 	    int num_gpu_global                 =  problem -> mpi_topology -> total_num_gpus;
 	    int gpu                            =  problem -> mpi_topology -> global_gpu_maping[rank][thread_data -> thread_num];
 		//int gpu                             =thread_data -> thread_num;
-	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer;
+	    struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value> * mpi_ring_buffer =  problem -> mpi_ring_buffer[thread_data -> thread_num];
 	#else
 	    int rank                           =  0;
 	    //int num_gpu_local                  =  problem -> num_gpus;
@@ -1206,7 +1213,7 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 	    *scanned_edges_       =   NULL;
 	    int           peer, peer_, peer__, gpu_, i, iteration_, wait_count, original_peer;
 	    bool          over_sized;
-
+        int virtual_local_peer, local_peer;
 
 
 #ifdef WITHMPI
@@ -1235,10 +1242,10 @@ printf("MPI ring buffer set to %d for peer %d\n",mpi_ring_buffer->front_pos[send
 			}
 	    }
 
-		while(problem->mpi_ring_buffer->checked[local_gpu]==0){sleep(0);}
-		problem->mpi_ring_buffer->checked[local_gpu]=0;
+		while(mpi_ring_buffer->checked==0){sleep(0);}
+		mpi_ring_buffer->checked=0;
 printf("**************** set to 0 once\n");
-	    while (!problem->mpi_ring_buffer->all_done)
+	    while (!mpi_ring_buffer->all_done)
 #else
 	    while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global))
 #endif
@@ -1279,10 +1286,10 @@ printf("**************** set to 0 once\n");
 
 #ifdef WITHMPI
 printf("**************** set to 0 again\n");
-				while(problem->mpi_ring_buffer->checked[local_gpu]==0){sleep(0);}
-				problem->mpi_ring_buffer->checked[local_gpu]=0;
+				while(mpi_ring_buffer->checked==0){sleep(0);}
+				mpi_ring_buffer->checked=0;
 
-	            while (data_slice->wait_counter < num_gpu_global*2 && !problem->mpi_ring_buffer->all_done)
+	            while (data_slice->wait_counter < num_gpu_global*2 && !mpi_ring_buffer->all_done)
 #else
 	                while (data_slice->wait_counter < num_gpu_global*2
 	                       && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice,num_gpu_global)))
@@ -1333,6 +1340,8 @@ printf("**************** set to 0 again\n");
 	                        peer                = peer_<= gpu? peer_-1   : peer_       ;
 							original_peer       = peer_ <= gpu ? peer_-1 : peer_;
 	                        gpu_                = peer <  gpu? gpu: gpu+1;
+                            local_peer          = problem->mpi_topology->local_gpu[original_peer] ;
+                            virtual_local_peer  = local_peer>local_gpu?local_peer:local_peer+1;
 	                        iteration           = enactor_stats[peer_].iteration;
 	                        iteration_          = iteration%4;
 	                        pre_stage           = stages[peer__];
@@ -1342,7 +1351,6 @@ printf("**************** set to 0 again\n");
 	                        frontier_attribute_ = &(frontier_attribute         [peer_]);
 	                        enactor_stats_      = &(enactor_stats              [peer_]);
 	                        work_progress_      = &(work_progress              [peer_]);
-
 
 	                        if (Enactor::DEBUG && to_show[peer__])
 	                        {
@@ -1358,7 +1366,6 @@ printf("**************** set to 0 again\n");
 	                                                   mssg,
 	                                                   streams[peer__]);
 	                        }
-
 	                        to_show[peer__]=true;
 	                        switch (stages[peer__])
 	                        {
@@ -1380,7 +1387,7 @@ printf("**************** set to 0 again\n");
 	                                    //initialize the income stream event flag
 										if(problem->mpi_topology->rank_of_gpu[peer] == problem->mpi_topology->rank_of_gpu[gpu])
 										{
-	                                        Set_Record(data_slice, iteration, peer_, 0, streams[peer__]);
+                                            Set_Record(data_slice, iteration, peer_, 0, streams[peer__]);
 										}else{
 											MPI_PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
@@ -1420,9 +1427,9 @@ printf("**************** set to 0 again\n");
 	                                    {
 
 
-	                                        if(!mpi_ring_buffer->has_data(original_peer))
+	                                        if (!mpi_ring_buffer->has_data(original_peer))
 	                                        {//if not, do nothing
-
+                                                printf(" gpu/peer__ %i/%i : checked for %d. Fill level = [%d, %d, %d, %d]\n",gpu,peer__,original_peer, mpi_ring_buffer->fill_level[0], mpi_ring_buffer->fill_level[1], mpi_ring_buffer->fill_level[2], mpi_ring_buffer->fill_level[3]);fflush(stdout);
 	                                            to_show[peer__]=false;
 	                                            stages[peer__]--;        //at the end ofthe loop, the stages increase. Hence "--" means to stay in stage 0
 	                                            break;
@@ -1467,7 +1474,6 @@ printf("**************** set to 0 again\n");
 												enactor_stats,
 												s_data_slice[local_gpu].GetPointer(util::HOST),
 												streams[peer__]);
-
 	                                        memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
 	                                               data_slice -> vertex_associate_ins[iteration%2][peer_].GetPointer(util::HOST),
 	                                               sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES);
@@ -1491,11 +1497,16 @@ printf("**************** set to 0 again\n");
 	                                               sizeof(Value*   ) * NUM_VALUE__ASSOCIATES);
 
 	                                        offset = offset + sizeof(Value*   ) * NUM_VALUE__ASSOCIATES ;
+
 	                                    }
 	                                    else   //data was received via CudaMemcpy
 	                                    {
-
-	                                        if (!(s_data_slice[peer]->events_set[iteration_][gpu_][0])) //check if event happened
+                                            //set via
+                                            //
+	                                        //data_slice->events[iteration%4][peer_][stage]
+                                            //on the sending gpu
+                                            //
+	                                        if (!(s_data_slice[local_peer]->events_set[iteration_][gpu_][0])) //check if event happened
 	                                        {   //if not, do nothing
 
 	                                            to_show[peer__]=false;
@@ -1504,7 +1515,7 @@ printf("**************** set to 0 again\n");
 	                                        }
 
 	                                        //reset event flag
-	                                        s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
+	                                        s_data_slice[local_peer]->events_set[iteration_][gpu_][0]=false;
 	                                        frontier_attribute_->queue_length = data_slice->in_length[iteration%2][peer_];
 	                                        data_slice->in_length[iteration%2][peer_]=0;
 
@@ -1606,7 +1617,8 @@ if(1){float a[7];
 	                                {
 	                                    if(problem->mpi_topology->rank_of_gpu[original_peer] != problem->mpi_topology->rank_of_gpu[gpu])  //if data has to be sent via MPI to another node
 	                                    {
-	                                        //MPI_PUSH_NEIGHBOR
+if(1){int a[3];cudaMemcpy(&a,s_data_slice  [local_gpu] .GetPointer(util::HOST)->keys_out[peer].GetPointer(util::DEVICE),sizeof(VertexId) * 3, cudaMemcpyDeviceToHost);printf("tmpkeys %i %i %d\n",a[0],a[1],a[2]);}
+                                            //MPI_PUSH_NEIGHBOR
 	                                        MPI_PushNeighbor <
 	                                        Enactor::SIZE_CHECK,
 	                                        SizeT,
@@ -1633,6 +1645,7 @@ if(1){float a[7];
 	                                           mpi_ring_buffer->mpi_value__type,
 											   mpi_sendbuffers
 	                                           );
+
 	                                    }
 	                                    else //copy data on same node
 	                                    {
@@ -2068,12 +2081,12 @@ if(1){float a[7];
 	                            if (enactor_stats_->retval) break;
 	                            frontier_attribute_->output_length.Move(util::DEVICE, util::HOST, 1, 0, streams[peer_]);
 
-								/*
-								if(frontier_attribute_->output_length[0] > graph_slice->nodes)
+								
+								if(frontier_attribute_->output_length[0] > graph_slice->edges || frontier_attribute_->output_length[0]<0)
 								{
-									frontier_attribute_->output_length[0]=graph_slice->nodes;
+									frontier_attribute_->output_length[0]=graph_slice->edges;
 								}
-								*/
+								
 
 	                            if (Enactor::SIZE_CHECK)
 	                            {
@@ -2215,14 +2228,15 @@ if(1){float a[7];
 	 * \return GPU_Topology
 	 *
 	 * struct GPU_Topology
-		int num_servers                    ;   // the number of involved servers
-		int *num_gpus_per_server           ;   // how many GPUs are used in each server
-		int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
-		int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
-		int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
-		int total_num_gpus                 ;   // the total number of GPUs
-		int local_rank                     ;   // the local MPI rank
-	 *
+     *  int num_servers                    ;   // the number of involved servers
+     *  int *num_gpus_per_server           ;   // how many GPUs are used in each server
+     *  int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
+     *  int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+     *  int * local_gpu                    ;   // local_gpu[global_gpu] gives, for a global gpu, its local number on that node
+     *  int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
+     *  int * global_to_device_idx         ;   // gives for the global gpu number the device id of that GPU on the node
+     *  int total_num_gpus                 ;   // the total number of GPUs
+     *  int local_rank                     ;   // the local MPI rank
 	 */
 	struct gunrock::app::GPU_Topology read_mpi_topology_config_file(const char * filename)
 	{
@@ -2266,6 +2280,7 @@ if(1){float a[7];
 	    topol.num_servers = (int)gpu_mapping.size();
 	    topol.num_gpus_per_server  = (int  *)malloc(sizeof(int)*topol.num_servers);
 	    topol.rank_of_gpu          = (int  *)malloc(sizeof(int)*global_gpu_nr);
+	    topol.local_gpu            = (int  *)malloc(sizeof(int)*global_gpu_nr);
 	    topol.local_gpu_mapping    = (int **)malloc(sizeof(int*)*topol.num_servers);
 	    topol.global_gpu_maping    = (int **)malloc(sizeof(int*)*topol.num_servers);
 		topol.global_to_device_idx = (int  *)malloc(sizeof(int)*global_gpu_nr);
@@ -2280,7 +2295,8 @@ if(1){float a[7];
 	        for(int j=0; j<topol.num_gpus_per_server[i]; j++)
 	        {
 	            topol.rank_of_gpu[offset]=i;
-		    topol.global_to_device_idx[offset] = (int)gpu_mapping[i][j].first;
+		        topol.global_to_device_idx[offset] = (int)gpu_mapping[i][j].first;
+                topol.local_gpu[offset] = j;
 	            offset++;
 	            topol.local_gpu_mapping[i][j] = (int)gpu_mapping[i][j].first;
 	            topol.global_gpu_maping[i][j] = (int)gpu_mapping[i][j].second;

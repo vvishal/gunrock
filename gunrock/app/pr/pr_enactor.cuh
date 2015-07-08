@@ -1356,8 +1356,8 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                    	   problem->graph_slices[0],
                        sent_requests,
                        req_size,
-                       problem->mpi_ring_buffer->mpi_vertex_type,
-                       problem->mpi_ring_buffer->mpi_value__type,
+                       problem->mpi_ring_buffer[0]->mpi_vertex_type,
+                       problem->mpi_ring_buffer[0]->mpi_value__type,
                        mpi_sendbuffer
                        );
 
@@ -1431,7 +1431,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                                 int msg_length = problem->mpi_ring_buffer->msg_length[peer][buffer_pos];
                                 printf("message length of last message %d\n",msg_length);
     							MPI_buffer2receiving_device<PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
-    								problem->mpi_ring_buffer,
+    								problem->mpi_ring_buffer[0],
     								peer,
     								peer,
     								enactor_stats,
@@ -1670,7 +1670,14 @@ public:
                 thread_slices[num_gpus_local].problem      = (void*)problem;
                 thread_slices[num_gpus_local].enactor      = (void*)this;
                 thread_slices[num_gpus_local].stats        = -1;
-				CUTThread MPI_thread_id = cutStartThread(
+				void (*comm_loop_func_p)(ThreadSlice *) = &(MPI_Comm_Loop<0,1,PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>,PRFunctor<VertexId, SizeT, Value, Problem>,PRIteration<
+                                AdvanceKernelPolity,
+                                FilterKernelPolicy,
+                                PREnactor<Problem, INSTRUMENT, DEBUG, SIZE_CHECK>
+                            > >);
+                CUTThread MPI_thread_id = cutStartThread((CUT_THREADROUTINE)comm_loop_func_p,(void*)&(thread_slices[num_gpus_local]));
+                /*
+                CUTThread MPI_thread_id = cutStartThread(
 					(CUT_THREADROUTINE)&(
 						MPI_Comm_Loop<
 							0,
@@ -1684,6 +1691,7 @@ public:
 							>
 						>
 					), (void*)&(thread_slices[num_gpus_local]));
+                */
 #endif
 
         return retval;
@@ -1725,7 +1733,7 @@ printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enact
 #ifdef WITHMPI
 		problem->mpi_ring_buffer->all_done = 1; //stop MPI communication loop
 #endif
-        if (this->DEBUG) printf("\nGPU PR Done.\n");
+        if (DEBUG) printf("\nGPU PR Done.\n");
         return retval;
     }
 

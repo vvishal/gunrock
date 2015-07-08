@@ -318,6 +318,7 @@ namespace app {
        int *num_gpus_per_server           ;   // how many GPUs are used in each server
        int ** global_gpu_maping           ;   // global_gpu_maping[server][thread] gives a globally unique number (for data splitting)
        int ** local_gpu_mapping           ;   // local_gpu_mapping[server][thread] gives, for each server, a unique number that addresses the device
+       int * local_gpu                    ;   // local_gpu[global_gpu] gives, for a global gpu, its local number on that node
        int * rank_of_gpu                  ;   // gives for each GPU (global gpu index) its node id
        int * global_to_device_idx         ;   // gives for the global gpu number the device id of that GPU on the node
        int total_num_gpus                 ;   // the total number of GPUs
@@ -344,7 +345,7 @@ namespace app {
        int all_done                         ;
 	   int num_vertex_associate;
 	   int num_value__associate;
-       volatile int * checked;
+       volatile int checked;
        volatile int * fill_level;
 
        MPI_Ring_Buffer(int num_gpu_global, int size, SizeT num_vertex_associate, SizeT    num_value__associate) //ring buffer initialization
@@ -411,12 +412,8 @@ namespace app {
 
        }
 
-       void initBarrier(int num_gpus_local){
-           checked = (volatile int *)malloc(sizeof(int)*num_gpus_local);
-           for(int g =0; g<num_gpus_local; g++)
-           {
-               checked[g]=0;
-           }
+       void initBarrier(){
+           checked = 0;
        }
 
        int has_data(int index){
@@ -1197,7 +1194,7 @@ namespace app {
        VertexId            **backward_convertions; // Convertion tables for backward propergation
    #ifdef WITHMPI
        struct GPU_Topology * mpi_topology        ; // Server indices for each gpu, in case of a distributed system
-       struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> * mpi_ring_buffer ; // the mpi ring buffer for receiving information
+       struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> ** mpi_ring_buffer ; // the mpi ring buffers for receiving information(one for each GPU)
    #endif
        // Methods
 

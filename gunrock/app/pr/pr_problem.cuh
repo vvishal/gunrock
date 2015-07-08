@@ -456,6 +456,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
 
 			   //we only need 2*num_gpus_local cuda streams for each GPU, since non-local communication is handeled via MPI
                //however, we assign 2*num_gpus_global, because we don't know which gpus are local and which not
+               printf("%s:%i  gpu=%d num_gpus_local=%d gpu*2*num_gpus_global=%d\n",__FILE__,__LINE__,gpu,num_gpus_local,gpu*2*num_gpus_global);
                data_slice_->streams.SetPointer(&streams[gpu*2*num_gpus_global], 2*num_gpus_global);
                cudaStream_t *streams = data_slice_->streams.GetPointer(util::HOST);
                if (num_gpus_global > 1)
@@ -475,10 +476,16 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
            }
        } while (0);
 
-	   this -> mpi_ring_buffer = new struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value>(num_gpus_global,4,num_vertex_associate,num_value__associate); //ring buffer length = 4
-	   register_mpi_datatypes<VertexId>(& (this -> mpi_ring_buffer -> mpi_vertex_type));
-	   register_mpi_datatypes<Value>(& (this -> mpi_ring_buffer -> mpi_value__type));
-       this -> mpi_ring_buffer->initBarrier(num_gpus_local);
+
+	   this -> mpi_ring_buffer = (struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> ** mpi_ring_buffer)malloc(
+		   sizeof(struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> ** mpi_ring_buffer)*num_gpus_local);
+	   for(int g=0; g<num_gpus_local; g++)
+	   {
+	   		this -> mpi_ring_buffer[g]=new struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value>(num_gpus_global,4,num_vertex_associate,num_value__associate); //ring buffer length = 4
+ 	    	register_mpi_datatypes<VertexId>(& (this -> mpi_ring_buffer[g] -> mpi_vertex_type));
+ 	    	register_mpi_datatypes<Value>(& (this -> mpi_ring_buffer[g] -> mpi_value__type));
+        	this -> mpi_ring_buffer[g]->initBarrier();
+	   }
 
        delete[] local_nodes; local_nodes = NULL;
 

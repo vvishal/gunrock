@@ -808,6 +808,8 @@ int main( int argc, char ** argv)
 		mpi_topology->local_gpu_mapping = topo.local_gpu_mapping;
 		mpi_topology->total_num_gpus = topo.total_num_gpus;
 		mpi_topology->rank_of_gpu = topo.rank_of_gpu;
+        mpi_topology->global_to_device_idx = topo.global_to_device_idx;
+        mpi_topology->local_gpu = topo.local_gpu;
 		mpi_topology->local_rank = rank;
 
 		num_gpus = mpi_topology->num_gpus_per_server[rank];
@@ -824,8 +826,8 @@ int main( int argc, char ** argv)
 		return 0;
 	}
 
-	streams  = new cudaStream_t[num_gpus * mpi_topology->total_num_gpus * 2];
-    context  = new ContextPtr  [num_gpus * num_gpus];
+	streams  = new cudaStream_t[mpi_topology->total_num_gpus * mpi_topology->total_num_gpus * 2];
+    context  = new ContextPtr  [mpi_topology->total_num_gpus * mpi_topology->total_num_gpus];
 
 	std::stringstream gpu_output_stream;
 	gpu_output_stream << "MPI rank " << rank << " using "<< num_gpus << " gpus: ";
@@ -834,11 +836,11 @@ int main( int argc, char ** argv)
     {
 		gpu_output_stream << " " << gpu_idx[gpu]<< " ";
         util::SetDevice(gpu_idx[gpu]);
-        for (int i=0;i<num_gpus*2;i++)
+        for (int i=0;i<mpi_topology->total_num_gpus*2;i++)
         {
-            int _i = gpu*num_gpus*2+i;
+            int _i = gpu*mpi_topology->total_num_gpus*2+i;
             util::GRError(cudaStreamCreate(&streams[_i]), "cudaStreamCreate failed.", __FILE__, __LINE__);
-            if (i<num_gpus) context[gpu*num_gpus+i] = mgpu::CreateCudaDeviceAttachStream(gpu_idx[gpu], streams[_i]);
+            if (i<num_gpus) context[gpu*mpi_topology->total_num_gpus+i] = mgpu::CreateCudaDeviceAttachStream(gpu_idx[gpu], streams[_i]);
         }
     }
     gpu_output_stream << std::endl;
