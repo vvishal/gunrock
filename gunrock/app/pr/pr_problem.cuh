@@ -51,14 +51,14 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
     struct DataSlice : DataSliceBase<SizeT, VertexId, Value>
     {
         // device storage arrays
-        util::Array1D<SizeT, Value   > rank_curr;           /**< Used for ping-pong page rank value */
-        util::Array1D<SizeT, Value   > rank_next;           /**< Used for ping-pong page rank value */       
-        util::Array1D<SizeT, SizeT   > degrees;             /**< Used for keeping out-degree for each vertex */
-        util::Array1D<SizeT, SizeT   > degrees_pong;
-        util::Array1D<SizeT, SizeT   > labels;
-        util::Array1D<SizeT, VertexId> node_ids;
-        util::Array1D<SizeT, SizeT   > markers;
-        util::Array1D<SizeT, VertexId> *temp_keys_out;
+        util::Array1D<SizeT, Value    > rank_curr;           /**< Used for ping-pong page rank value */
+        util::Array1D<SizeT, Value    > rank_next;           /**< Used for ping-pong page rank value */       
+        util::Array1D<SizeT, SizeT    > degrees;             /**< Used for keeping out-degree for each vertex */
+        util::Array1D<SizeT, SizeT    > degrees_pong;
+        util::Array1D<SizeT, VertexId > labels;
+        util::Array1D<SizeT, VertexId > node_ids;
+        util::Array1D<SizeT, SizeT    > markers;
+        util::Array1D<SizeT, VertexId > *temp_keys_out;
         Value    threshold;               /**< Used for recording accumulated error */
         Value    delta;
         VertexId src_node;
