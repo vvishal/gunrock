@@ -971,10 +971,10 @@ public:
 
             for (peer_ = 0; peer_<num_gpus;peer_++)
                 Scan<mgpu::MgpuScanTypeInc>(
-                    (int*)(data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE)),
+                    ( SizeT* )(data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE)),
                     graph_slice->nodes,
-                    (int)0, mgpu::plus<int>(), (int*)0, (int*)0,
-                    (int*)(data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE)),
+                    ( SizeT )0, mgpu::plus< SizeT >(), ( SizeT* )0, ( SizeT* )0,
+                    ( SizeT* )(data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE)),
                     context[0]);
             //for (peer_ = 0; peer_<num_gpus;peer_++)
             //    util::cpu_mt::PrintGPUArray("keys_marker1", data_slice[0]->keys_marker[peer_].GetPointer(util::DEVICE), graph_slice->nodes, thread_num, enactor_stats->iteration, -1, stream);
