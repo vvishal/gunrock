@@ -711,7 +711,7 @@ int main( int argc, char** argv)
     parameter -> streams     = streams;
 
 #if USE64 
-    typedef long long int VertexId;							// Use as the node identifier type
+    typedef int VertexId;							// Use as the node identifier type
     typedef float Value;								// Use as the value type
     typedef long long int SizeT;								// Use as the graph size type
 #else
