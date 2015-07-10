@@ -431,8 +431,6 @@ cudaError_t Check_Size(
 {
     cudaError_t retval = cudaSuccess;
 
-    target_length = (int )target_length; // Quickfix -- Need to initialize frontier_attribute
-
     if (target_length > array->GetSize())
     {
         printf("%d\t %d\t %d\t %s \t oversize :\t %d ->\t %d\n",
