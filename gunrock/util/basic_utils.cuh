@@ -16,6 +16,8 @@
 namespace gunrock {
 namespace util {
 
+
+	// Struct to create an unsigned version of an integral type 
 	template<typename T> struct make_unsigned;
 	
 	template<> struct make_unsigned<char>                   { typedef unsigned char          type; };
@@ -29,5 +31,19 @@ namespace util {
 	template<> struct make_unsigned<unsigned long int>      { typedef unsigned long int      type; };
 	template<> struct make_unsigned<long long int>          { typedef unsigned long long int type; };
 	template<> struct make_unsigned<unsigned long long int> { typedef unsigned long long int type; };
+
+	
+	// Struct to create a typename that is compatible with CUDA atomic functions.
+	// Most atomic functions take only int, unsigned int and unsigned long long int 
+        template<typename T> struct get_atomic_type;
+
+        template<> struct get_atomic_type<int>                    { typedef int 		   type; };
+        template<> struct get_atomic_type<unsigned int>           { typedef unsigned int           type; };
+        template<> struct get_atomic_type<long int>               { typedef unsigned long int      type; };
+        template<> struct get_atomic_type<unsigned long int>      { typedef unsigned long int      type; };
+        template<> struct get_atomic_type<long long int>          { typedef unsigned long long int type; };
+        template<> struct get_atomic_type<unsigned long long int> { typedef unsigned long long int type; };
+
+
 }
 }

@@ -45,7 +45,7 @@ namespace bfs {
         const size_t           array_size,
               char*            array)
     {
-	typedef typename gunrock::util::make_unsigned<VertexId>::type UVertexId;  // Get the unsigned type for atomics
+	typedef typename gunrock::util::get_atomic_type<VertexId>::type UVertexId;  // Get the unsigned type for atomics
 								     // This will generate warnings when "int" is used
         extern __shared__ char s_array[];
         const SizeT STRIDE = gridDim.x * blockDim.x;
