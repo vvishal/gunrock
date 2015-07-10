@@ -44,8 +44,8 @@ namespace util {
 template <typename T, typename SizeType>
 __global__ void MemsetKernel(T *d_out, T value, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_out[idx] = value;
     }
 }
@@ -63,8 +63,8 @@ __global__ void MemsetKernel(T *d_out, T value, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetIdxKernel(T *d_out, SizeType length, int scale=1)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_out[idx] = idx*scale;
     }
 }
@@ -82,9 +82,9 @@ __global__ void MemsetIdxKernel(T *d_out, SizeType length, int scale=1)
 template <typename T, typename SizeType>
 __global__ void MemsetAddKernel(T *d_out, T value, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
 
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_out[idx] += value;
     }
 }
@@ -102,8 +102,8 @@ __global__ void MemsetAddKernel(T *d_out, T value, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetScaleKernel(T *d_out, T value, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_out[idx] *= value;
     }
 }
@@ -121,8 +121,8 @@ __global__ void MemsetScaleKernel(T *d_out, T value, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetAddVectorKernel(T *d_dst, T *d_src, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_dst[idx] += d_src[idx];
     }
 }
@@ -140,8 +140,8 @@ __global__ void MemsetAddVectorKernel(T *d_dst, T *d_src, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetMultiplyVectorKernel(T *d_dst, T *d_src, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_dst[idx] *= d_src[idx];
     }
 }
@@ -159,8 +159,8 @@ __global__ void MemsetMultiplyVectorKernel(T *d_dst, T *d_src, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetCopyVectorKernel(T *d_dst, T *d_src, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_dst[idx] = d_src[idx];
     }
 }
@@ -180,8 +180,8 @@ __global__ void MemsetCopyVectorKernel(T *d_dst, T *d_src, SizeType length)
 template <typename T, typename SizeType>
 __global__ void MemsetMadVectorKernel(T *d_dst, T *d_src1, T *d_src2, int scale, SizeType length)
 {
-    const SizeType STRIDE = gridDim.x * blockDim.x;
-    for (SizeType idx = (blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
+    const SizeType STRIDE = ( SizeType )gridDim.x * blockDim.x;
+    for (SizeType idx = (( SizeType )blockIdx.x * blockDim.x) + threadIdx.x; idx < length; idx += STRIDE) {
         d_dst[idx] = d_src1[idx] * scale + d_src2[idx];
     }
 }
