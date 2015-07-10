@@ -775,7 +775,7 @@ int main( int argc, char** argv)
     //
     typedef int VertexId;                   // Use as the node identifier type
     typedef int Value;                      // Use as the value type
-    typedef int SizeT;                      // Use as the graph size type
+    typedef long long  int SizeT;                      // Use as the graph size type
     Csr<VertexId, Value, SizeT> csr(false); // default value for stream_from_host is false
     if (graph_args < 1) { Usage(); return 1; }
 
