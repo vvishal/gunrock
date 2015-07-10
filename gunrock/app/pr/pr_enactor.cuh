@@ -1107,7 +1107,6 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                 for (peer_ = 1; peer_<num_gpus; peer_++)
                     data_slice[0]->out_length[peer_] = 0;
             }
-
             if (enactor_stats->retval = cudaStreamSynchronize(stream)) return;
 
             for (peer_ = 0; peer_<num_gpus; peer_++)
@@ -1315,7 +1314,9 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 #ifdef WITHMPI
 					if(thread_num==0)  //stop MPI Comm Loop
 					{
-						problem  ->  mpi_ring_buffer -> all_done=1;
+                        for(int g=0;g<num_gpus_local; g++){
+						    problem  ->  mpi_ring_buffer[g] -> all_done=1;
+                        }
 					}
 				    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*(problem->mpi_topology->total_num_gpus));
                     int ** req_size = (int**)malloc(sizeof(int*)*problem->mpi_topology->total_num_gpus);
@@ -1360,7 +1361,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                        problem->mpi_ring_buffer[0]->mpi_value__type,
                        mpi_sendbuffer
                        );
-
+                    printf("sent out node content from gpu %i to 0\n",problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num]);fflush(stdout);
 					while(!MPI_Communication_Check(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global,mpi_sendbuffer))
 					{
 						sleep(0);
@@ -1390,7 +1391,6 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                 {
                     for (int peer=1; peer<num_gpus_global; peer++)
                     {
-                        printf("peer = %d\n",peer); fflush(stdout);
 #ifdef WITHMPI
     				    if (problem->mpi_topology->rank_of_gpu[peer]==0)
 #endif
@@ -1399,15 +1399,28 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                             {
                         	    markers[peer] =1 ;
                         	    counter ++;
-                        	    problem->data_slices[peer]->final_event_set = false;
+                                int local_peer = peer;
+#ifdef WITHMPI
+                                local_peer          = problem->mpi_topology->local_gpu[peer];
+#endif
+                        	    problem->data_slices[local_peer]->final_event_set = false;
                         	    int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
-                        	    cudaStreamWaitEvent(data_slice->streams[peer],
-                                	problem->data_slices[peer]->events[peer_iteration%4][1][0], 0);
+#ifdef WITHMPI
+                                peer_iteration = enactor->enactor_stats[local_peer*num_gpus_global].iteration;
+#endif
+                        	    cudaStreamWaitEvent(data_slice->streams[local_peer],
+                                	problem->data_slices[local_peer]->events[peer_iteration%4][1][0], 0);
+                                int k[5];float f[5];
+                                cudaMemcpy(&(k[0]),data_slice->keys_in[peer_iteration%2][local_peer].GetPointer(util::DEVICE),problem->data_slices[local_peer]->local_nodes*sizeof(int),cudaMemcpyDeviceToHost);
+                                cudaMemcpy(&(f[0]),data_slice->value__associate_in[peer_iteration%2][local_peer][0].GetPointer(util::DEVICE),problem->data_slices[local_peer]->local_nodes*sizeof(float),cudaMemcpyDeviceToHost);
+                                printf("receiving from local_peer %i (peer %i) from buffer [%i][%i][%i] with iteration %i: ",local_peer, peer,peer_iteration%2,local_peer,0, peer_iteration);
+                                for(int i=0;i<problem->data_slices[local_peer]->local_nodes; i++) printf(" %i:%f ",k[i],f[i]);
+                                printf("\n");
                         	    Expand_Incoming_Final<VertexId, SizeT, Value>
-                                	<<<128, 128, 0, data_slice->streams[peer]>>> (
-                            	    	problem->data_slices[peer]->local_nodes,
-                            	    	data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
-                            	    	data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
+                                	<<<128, 128, 0, data_slice->streams[local_peer]>>> (
+                            	    	problem->data_slices[local_peer]->local_nodes,
+                            	    	data_slice->keys_in[peer_iteration%2][local_peer].GetPointer(util::DEVICE),
+                            	    	data_slice->value__associate_in[peer_iteration%2][local_peer][0].GetPointer(util::DEVICE),
                             	    	data_slice->rank_curr.GetPointer(util::DEVICE));
                             }
                         }
@@ -1421,14 +1434,14 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 
     							//copy from ring buffer to
     							printf("waiting for final data from peer %d, %s:%d\n", peer,__FILE__,__LINE__);
-                                while(problem->mpi_ring_buffer->all_done!=2){sleep(0);}
-    							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
-                                while(problem-> mpi_ring_buffer->fill_level[peer]>1){problem->mpi_ring_buffer->pop_back(peer);}
-    							while(!problem->mpi_ring_buffer->has_data(peer)){sleep(0);}
+                                while(problem->mpi_ring_buffer[0]->all_done!=2){sleep(0);}
+    							while(!problem->mpi_ring_buffer[0]->has_data(peer)){sleep(0);}
+                                while(problem-> mpi_ring_buffer[0]->fill_level[peer]>1){problem->mpi_ring_buffer[0]->pop_back(peer);}
+    							while(!problem->mpi_ring_buffer[0]->has_data(peer)){sleep(0);}
 
 
-                                int buffer_pos = problem->mpi_ring_buffer->back_pos[peer];
-                                int msg_length = problem->mpi_ring_buffer->msg_length[peer][buffer_pos];
+                                int buffer_pos = problem->mpi_ring_buffer[0]->back_pos[peer];
+                                int msg_length = problem->mpi_ring_buffer[0]->msg_length[peer][buffer_pos];
                                 printf("message length of last message %d\n",msg_length);
     							MPI_buffer2receiving_device<PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
     								problem->mpi_ring_buffer[0],
@@ -1651,7 +1664,7 @@ public:
             thread_slices[gpu].thread_num   = gpu;                            //assign thread id to gpu id
             thread_slices[gpu].problem      = (void*)problem;
             thread_slices[gpu].enactor      = (void*)this;
-            thread_slices[gpu].context      =&(context[gpu*num_gpus_local]);
+            thread_slices[gpu].context      =&(context[gpu*problem->mpi_topology->total_num_gpus]);
             thread_slices[gpu].stats        = -1;
             EnactorStats * e = &(this->enactor_stats[0]);
 
@@ -1731,7 +1744,10 @@ printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enact
                 {retval=this->enactor_stats[gpu].retval;break;}
         } while (0);
 #ifdef WITHMPI
-		problem->mpi_ring_buffer->all_done = 1; //stop MPI communication loop
+        for(int g=0; g<this->num_gpus_local; g++){
+		    problem->mpi_ring_buffer[g]->all_done = 1; //stop MPI communication loop
+        }
+
 #endif
         if (DEBUG) printf("\nGPU PR Done.\n");
         return retval;

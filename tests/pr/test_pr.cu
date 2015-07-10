@@ -840,7 +840,12 @@ int main( int argc, char ** argv)
         {
             int _i = gpu*mpi_topology->total_num_gpus*2+i;
             util::GRError(cudaStreamCreate(&streams[_i]), "cudaStreamCreate failed.", __FILE__, __LINE__);
-            if (i<num_gpus) context[gpu*mpi_topology->total_num_gpus+i] = mgpu::CreateCudaDeviceAttachStream(gpu_idx[gpu], streams[_i]);
+            printf("stream %p for gpu %i\n",&streams[_i], gpu);
+            printf("loop ids gpu=%i, i=%i, _i=%i, context init %i %s\n",gpu,i,_i,gpu*mpi_topology->total_num_gpus+i,i<mpi_topology->total_num_gpus?"yes":"no");
+            if (i<mpi_topology->total_num_gpus){
+                 context[gpu*mpi_topology->total_num_gpus+i] = mgpu::CreateCudaDeviceAttachStream(gpu_idx[gpu], streams[_i]);
+                 printf("context ptr %p for gpu %i\n",&(context[gpu*mpi_topology->total_num_gpus+i]),gpu);
+            }
         }
     }
     gpu_output_stream << std::endl;

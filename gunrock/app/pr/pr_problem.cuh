@@ -477,8 +477,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
        } while (0);
 
 
-	   this -> mpi_ring_buffer = (struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> ** mpi_ring_buffer)malloc(
-		   sizeof(struct gunrock::app::MPI_Ring_Buffer<_SizeT,_VertexId,_Value> ** mpi_ring_buffer)*num_gpus_local);
+	   this -> mpi_ring_buffer = (struct gunrock::app::MPI_Ring_Buffer<SizeT,VertexId,Value> **)malloc(sizeof(struct gunrock::app::MPI_Ring_Buffer<SizeT,VertexId,Value> ** )*num_gpus_local);
 	   for(int g=0; g<num_gpus_local; g++)
 	   {
 	   		this -> mpi_ring_buffer[g]=new struct gunrock::app::MPI_Ring_Buffer<SizeT, VertexId, Value>(num_gpus_global,4,num_vertex_associate,num_value__associate); //ring buffer length = 4
