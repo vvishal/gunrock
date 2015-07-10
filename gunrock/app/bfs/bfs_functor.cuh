@@ -48,7 +48,7 @@ struct BFSFunctor
      */
     static __device__ __forceinline__ bool CondEdge(VertexId s_id, VertexId d_id, DataSlice *problem, VertexId e_id = 0, VertexId e_id_in = 0)
     {
-        typedef typename gunrock::util::make_unsigned<VertexId>::type UVertexId;  // Get the unsigned type for atomics
+        typedef typename gunrock::util::get_atomic_type<VertexId>::type UVertexId;  // Get the unsigned type for atomics
 								     // This will generate warnings when "int" is used
         if (ProblemData::ENABLE_IDEMPOTENCE) {
             return true;
