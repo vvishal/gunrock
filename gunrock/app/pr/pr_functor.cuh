@@ -158,7 +158,8 @@ struct PRFunctor
 
         //if (TO_TRACK)
         //if (to_track(node)) printf("%d \tr[%d] \t%f \t-> %f \t(%f)\n", problem->gpu_idx, node, problem->rank_curr[node], problem->rank_next[node], old_value); 
-        return (diff >= problem->threshold);
+        //return (diff >= problem->threshold);
+        return true; //force update of all vertices
     }
 
     /**

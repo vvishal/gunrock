@@ -28,6 +28,7 @@
 #include <gunrock/oprtr/filter/kernel_policy.cuh>
 
 #include <moderngpu.cuh>
+#include <type_traits>
 
 using namespace mgpu;
 
@@ -482,6 +483,8 @@ void PushNeibor(
     
     data_slice_p->in_length[enactor_stats->iteration%2][gpu_]
                   = queue_length;
+    printf("PushNeibor: data_slice_l=%p data_slice_p=%p gpu=%d peer=%d gpu_=%d iteration=%d queue_length=%d db=%d\n"
+        , data_slice_l, data_slice_p, gpu, peer, gpu_, enactor_stats->iteration, queue_length, enactor_stats->iteration%2);
     if (queue_length == 0) return;
    
     if (data_slice_p -> keys_in[t][gpu_].GetSize() < queue_length) to_reallocate=true;
@@ -544,6 +547,11 @@ void PushNeibor(
             data_slice_l->value__associate_outs[peer_][i],
             sizeof(Value) * queue_length, cudaMemcpyDefault, stream),
                 "cudaMemcpyPeer value__associate_out failed", __FILE__, __LINE__)) return;
+//        float tmp[queue_length];
+//        cudaMemcpy(tmp, data_slice_p->value__associate_ins[t][gpu_][i], sizeof(float) * queue_length, cudaMemcpyDeviceToHost);
+//        printf("gpu %d -> peer %d\n", gpu, peer);
+//        for (int i = 0; i < queue_length; ++i)
+//            printf("  %d %f\n", i, tmp[i]);
     }
 }
 
@@ -629,6 +637,38 @@ cudaError_t Check_Record(
     return retval;
 }
 
+
+//If Iteration provides a static member function with signature
+//  bool checkSync(const Enactor_Stats&)
+//then the return value will be used to determine whether or not
+//to do communication in a given iteration.  If such a method is
+//not provided, communication is always done.
+template <typename Iteration>
+struct CheckSync
+{
+  //See SO:87372
+  //this method only exists if Iteration has a static method checkSync that takes
+  //an EnactorStats ptr and returns bool.
+  template <class T> static typename std::is_same<bool
+    , decltype(T::checkSync( (const EnactorStats*)0 ))>::type hasMethod_(T*);
+  //default
+  template <class> static std::false_type hasMethod_(...);
+  static constexpr bool hasMethod = decltype(hasMethod_<Iteration>(0))::value;
+
+  static bool value(const EnactorStats*, ...)
+  {
+    return true;
+  }
+
+  template <class T = Iteration>
+  static typename std::enable_if<hasMethod, bool>::type value(EnactorStats* es)
+  {
+    return Iteration::checkSync(es);
+  }
+};
+
+
+
 template <
     int      NUM_VERTEX_ASSOCIATES,
     int      NUM_VALUE__ASSOCIATES,
@@ -686,7 +726,7 @@ void Iteration_Loop(
     int           peer, peer_, peer__, gpu_, i, iteration_, wait_count;
     bool          over_sized;
 
-    printf("Iteration entered\n");fflush(stdout);
+    //printf("Iteration entered\n");fflush(stdout);
     while (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus))
     {
         Total_Length             = 0;
@@ -719,6 +759,11 @@ void Iteration_Loop(
             for (i=0; i<data_slice->num_stages; i++)
                 data_slice->events_set[enactor_stats[0].iteration%4][peer][i]=false;
         }
+
+        
+        //let application decide whether to sync on this iteration or not
+        bool writeSync = CheckSync<Iteration>::value(enactor_stats);
+        printf("thread %d iteration=%d writeSync=%d\n", thread_num, enactor_stats->iteration, writeSync);
         
         while (data_slice->wait_counter < num_gpus*2
            && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus)))
@@ -753,6 +798,10 @@ void Iteration_Loop(
                         streams[peer__]);
                 }
                 to_show[peer__]=true;
+                
+//                printf("  tid %d iter=%d peer__=%d peer_=%d peer=%d gpu_=%d iter[peer_]=%d iter_=%d stage[peer__]=%d selector[peer_]=%d, readSync=%d\n"
+//                    , thread_num, s_enactor_stats->iteration, peer__, peer_, peer, gpu_, iteration, iteration_, stages[peer__]
+//                    , selector, readSync);
 
                 switch (stages[peer__])
                 {
@@ -766,6 +815,8 @@ void Iteration_Loop(
                         }
                         break;
                     } else if ((iteration==0 || data_slice->out_length[peer_]==0) && peer__>num_gpus) {
+//                        printf("* thread %d setting record iter=%d peer_=%d peer__=%d\n"
+//                            , thread_num, iteration, peer_, peer__);
                         Set_Record(data_slice, iteration, peer_, 0, streams[peer__]);
                         stages[peer__]=3;
                         break;
@@ -774,21 +825,27 @@ void Iteration_Loop(
                     if (peer__<num_gpus)
                     { //wait and expand incoming
                         if (!(s_data_slice[peer]->events_set[iteration_][gpu_][0]))
-                        {   to_show[peer__]=false;stages[peer__]--;break;}
-
+                        {
+                            to_show[peer__]=false;stages[peer__]--;
+                            //printf("  thread %d: peer=%d iteration_=%d gpu_=%d is not ready\n", thread_num, peer__, iteration_, gpu_);
+                            break;
+                        }
+                        int syncBuffer = iteration % 2;
                         s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
-                        frontier_attribute_->queue_length = data_slice->in_length[iteration%2][peer_];
-                        data_slice->in_length[iteration%2][peer_]=0;
+                        frontier_attribute_->queue_length = data_slice->in_length[syncBuffer][peer_];
+                        printf("* thread %d peer_ %d has given me queue_length=%d in db %d\n"
+                            , thread_num, peer_, frontier_attribute_->queue_length, syncBuffer);
+                        //data_slice->in_length[syncBuffer][peer_]=0;
                         if (frontier_attribute_->queue_length ==0)
                         {   stages[peer__]=3;break;}
 
                         offset = 0;
                         memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
-                                 data_slice -> vertex_associate_ins[iteration%2][peer_].GetPointer(util::HOST),
+                                 data_slice -> vertex_associate_ins[syncBuffer][peer_].GetPointer(util::HOST),
                                   sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES);
                         offset += sizeof(SizeT*   ) * NUM_VERTEX_ASSOCIATES ;
                         memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
-                                 data_slice -> value__associate_ins[iteration%2][peer_].GetPointer(util::HOST),
+                                 data_slice -> value__associate_ins[syncBuffer][peer_].GetPointer(util::HOST),
                                   sizeof(VertexId*) * NUM_VALUE__ASSOCIATES);
                         offset += sizeof(VertexId*) * NUM_VALUE__ASSOCIATES ;
                         memcpy(&(data_slice -> expand_incoming_array[peer_][offset]),
@@ -803,14 +860,20 @@ void Iteration_Loop(
 
                         grid_size = frontier_attribute_->queue_length/256+1;
                         if (grid_size>512) grid_size=512;
+                        printf("* thread %d waiting on peer_ %d peer %d iteration_ %d gpu_ %d\n"
+                            , thread_num, peer_, peer, iteration_, gpu_);
                         cudaStreamWaitEvent(streams[peer_],
                             s_data_slice[peer]->events[iteration_][gpu_][0], 0);
+                            
+                        printf("* thread %d expand_incoming incoming, queue length=%d\n"
+                            , thread_num, frontier_attribute_->queue_length);
                         Iteration::template Expand_Incoming<NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
                             grid_size, 256, 
                             offset,
                             streams[peer_],
                             frontier_attribute_->queue_length,
-                            data_slice ->keys_in[iteration%2][peer_].GetPointer(util::DEVICE),
+                            //data_slice ->keys_in[iteration%2][peer_].GetPointer(util::DEVICE),
+                            data_slice ->keys_in[0][peer_].GetPointer(util::DEVICE),
                             &frontier_queue_->keys[selector^1],
                             offset,
                             data_slice ->expand_incoming_array[peer_].GetPointer(util::DEVICE),
@@ -821,18 +884,29 @@ void Iteration_Loop(
                             Set_Record(data_slice, iteration, peer_, 2, streams[peer__]);
                             stages[peer__]=2;
                         }
+                        
                     } else { //Push Neibor
-                        PushNeibor <Enactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice,
-                                NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
-                            thread_num,
-                            peer,
-                            data_slice->out_length[peer_],
-                            enactor_stats_,
-                            s_data_slice  [thread_num].GetPointer(util::HOST),
-                            s_data_slice  [peer]      .GetPointer(util::HOST),
-                            s_graph_slice [thread_num],
-                            s_graph_slice [peer],
-                            streams       [peer__]);
+                        //let app decide whether to push or not.
+                        if (writeSync)
+                        {
+                            printf("* thread %d pushing, peer=%d peer_=%d peer__=%d out_length=%d\n"
+                                , thread_num, peer, peer_, peer__, data_slice->out_length[peer_]);
+                            PushNeibor <Enactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice,
+                                    NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
+                                thread_num,
+                                peer,
+                                data_slice->out_length[peer_],
+                                enactor_stats_,
+                                s_data_slice  [thread_num].GetPointer(util::HOST),
+                                s_data_slice  [peer]      .GetPointer(util::HOST),
+                                s_graph_slice [thread_num],
+                                s_graph_slice [peer],
+                                streams       [peer__]);
+                        }
+                        else
+                        {
+                          printf("thread %d skipped write sync on iteration %d\n", thread_num, s_enactor_stats->iteration);
+                        }
                         Set_Record(data_slice, iteration, peer_, stages[peer__], streams[peer__]);
                         stages[peer__]=3;
                     }
@@ -851,6 +925,7 @@ void Iteration_Loop(
                         streams          [peer_],
                         gunrock::oprtr::advance::V2V, true)) break;
 
+                    //printf("* thread %d in comp length\n", thread_num);
                     frontier_attribute_->output_length.Move(util::DEVICE, util::HOST,1,0,streams[peer_]);
                     if (Enactor::SIZE_CHECK)
                     {
@@ -920,6 +995,7 @@ void Iteration_Loop(
                             if (enactor_stats_->retval = 
                                 Check_Size<false, SizeT, VertexId> ("queue3", frontier_attribute_->output_length[0]+2, &frontier_queue_->keys  [selector^1], over_sized, thread_num, iteration, peer_, false)) break;
                         }
+                        //printf("* thread %d copy, queue_length=%d\n", thread_num, frontier_attribute_->queue_length);
                         if (frontier_attribute_->queue_length ==0) break;
 
                         if (enactor_stats_->retval = 
@@ -937,6 +1013,7 @@ void Iteration_Loop(
                     }
 
                     Total_Length += frontier_attribute_->queue_length;
+                    //printf("* thread %d copy, Total_Length=%d\n", thread_num, Total_Length);
                     break;
 
                 case 4: //End
@@ -1091,7 +1168,8 @@ void Iteration_Loop(
                             graph_slice);
 
                     }
-                    
+
+                    //printf("* thread %d: fullqueue_core, queue_length=%d\n", frontier_attribute_->queue_length);
                     Iteration::FullQueue_Core(
                         thread_num,
                         peer_,

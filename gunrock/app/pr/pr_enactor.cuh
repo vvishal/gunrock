@@ -159,6 +159,7 @@ namespace pr {
         {
             VertexId key = keys_in[x];
             Value old_value=atomicAdd(s_value__associate_org[0] + key, s_value__associate_in[0][x]);
+            //printf("rank[%d] = %f + %f \n", key, old_value, s_value__associate_in[0][x]);
             if (TO_TRACK)
             if (to_track(key)) printf("rank[%d] = %f + %f \n", key, old_value, s_value__associate_in[0][x]);
             x+=STRIDE;
@@ -244,6 +245,7 @@ namespace pr {
         {
             VertexId key = keys_out[x];
             rank_out[x] = rank_next[key];
+            //printf("assign_pr: rank[%d] = next[%d] = %f\n", x, key, rank_next[key]);
             x+=STRIDE;
         }
     }
@@ -657,6 +659,13 @@ public:
     typedef PRFunctor      <VertexId, SizeT, Value, Problem> PrFunctor;
     typedef PRMarkerFunctor<VertexId, SizeT, Value, Problem> PrMarkerFunctor;
 
+    //decide how many local iterations to do per global sync
+    static bool checkSync(const EnactorStats *stats)
+    {
+      return stats->iteration % 1 == 0;
+    }
+
+
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -1028,6 +1037,7 @@ public:
 
         for (peer_ = 1; peer_ < num_gpus; peer_ ++)
         {
+            printf("thread %d calling Assign_Values_PR\n", thread_num);
             Assign_Values_PR <VertexId, SizeT, Value>
                 <<<grid_size, block_size, 0, stream>>> (
                 data_slice[0]->out_length[peer_],

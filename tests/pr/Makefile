@@ -26,7 +26,7 @@ OSUPPER = $(shell uname -s 2>/dev/null | tr [:lower:] [:upper:])
 GEN_SM37 = -gencode=arch=compute_37,code=\"sm_37,compute_37\"
 GEN_SM35 = -gencode=arch=compute_35,code=\"sm_35,compute_35\" 
 GEN_SM30 = -gencode=arch=compute_30,code=\"sm_30,compute_30\" 
-SM_TARGETS = $(GEN_SM35) $(GEN_SM37)
+SM_TARGETS = $(GEN_SM35) #$(GEN_SM37)
 
 #-------------------------------------------------------------------------------
 # Libs
@@ -41,9 +41,9 @@ CUDA_INC = "$(shell dirname $(NVCC))/../include"
 MGPU_INC = "../../externals/moderngpu/include"
 CUB_INC = "../../externals/cub"
 BOOST_DIR = "../../../boost_1_53_0"
-BOOST_DEPS = -Xlinker $(BOOST_DIR)/bin.v2/libs/timer/build/gcc-4.6/release/link-static/threading-multi/cpu_timer.o -Xlinker $(BOOST_DIR)/bin.v2/libs/chrono/build/gcc-4.6/release/link-static/threading-multi/chrono.o -Xlinker $(BOOST_DIR)/bin.v2/libs/system/build/gcc-4.6/release/link-static/threading-multi/libboost_system.a -Xlinker -lrt
+BOOST_DEPS = -lboost_timer -lboost_chrono -lboost_system -lrt #-Xlinker $(BOOST_DIR)/bin.v2/libs/timer/build/gcc-4.6/release/link-static/threading-multi/cpu_timer.o -Xlinker $(BOOST_DIR)/bin.v2/libs/chrono/build/gcc-4.6/release/link-static/threading-multi/chrono.o -Xlinker $(BOOST_DIR)/bin.v2/libs/system/build/gcc-4.6/release/link-static/threading-multi/libboost_system.a -Xlinker -lrt
 OMP_DEPS = -Xcompiler -fopenmp -Xlinker -lgomp
-METIS_DEPS = -Xlinker "/usr/local/lib/libmetis.a"
+METIS_DEPS = -lmetis #-Xlinker "/usr/local/lib/libmetis.a"
 INC = -I$(CUDA_INC) -I$(BOOST_DIR) -I$(MGPU_INC) $(BOOST_DEPS) -I$(CUB_INC) $(OMP_DEPS) $(METIS_DEPS) -I.. -I../..
 
 #-------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ else
 	ARCH = -m64
 endif
 
-NVCCFLAGS = -Xptxas -v -Xcudafe -\# -lineinfo
+NVCCFLAGS = -std=c++11 -Xptxas -v -Xcudafe -\# -lineinfo
 
 ifeq (WIN_NT, $(findstring WIN_NT, $(OSUPPER)))
 	NVCCFLAGS += -Xcompiler /bigobj -Xcompiler /Zm500
