@@ -30,6 +30,9 @@
 #include <moderngpu.cuh>
 #include <type_traits>
 
+//for debugging
+#include <mutex> 
+
 using namespace mgpu;
 
 namespace gunrock {
@@ -326,11 +329,11 @@ __global__ void Make_Out(
             s_keys_outs[0][pos]=key;
         } else {
             s_keys_outs[target][pos]=convertion_table[key];
-            #pragma unrool
+            #pragma unroll
             for (int i=0;i<num_vertex_associates;i++)
                 s_vertex_associate_outss[target*num_vertex_associates+i][pos]
                     =s_vertex_associate_orgs[i][key];
-            #pragma unrool
+            #pragma unroll
             for (int i=0;i<num_value__associates;i++)
                 s_value__associate_outss[target*num_value__associates+i][pos]
                     =s_value__associate_orgs[i][key];
@@ -391,11 +394,11 @@ __global__ void Make_Out_Backward(
                 s_keys_outs[0][pos]=key;
             } else {
                 s_keys_outs[target][pos]=convertion_table[j];
-                #pragma unrool
+                #pragma unroll
                 for (int i=0;i<num_vertex_associates;i++)
                     s_vertex_associate_outss[target*num_vertex_associates+i][pos]
                         =s_vertex_associate_orgs[i][key];
-                #pragma unrool
+                #pragma unroll
                 for (int i=0;i<num_value__associates;i++)
                     s_value__associate_outss[target*num_value__associates+i][pos]
                         =s_value__associate_orgs[i][key];
@@ -454,6 +457,15 @@ cudaError_t Check_Size(
     return retval;
 }
 
+
+//this function computes which buffer is used for communication in a given
+//iteration.
+int getPushBufferIndex(int syncPeriod, int iter)
+{
+  return ((iter + 1) / syncPeriod) % 2;
+}
+
+
 template <
     bool     SIZE_CHECK,
     typename SizeT, 
@@ -472,19 +484,18 @@ void PushNeibor(
     DataSlice         *data_slice_p,
     GraphSlice        *graph_slice_l,
     GraphSlice        *graph_slice_p,
-    cudaStream_t      stream)
+    cudaStream_t      stream,
+    int               syncPeriod = 1)
 {
     if (peer == gpu) return;
     int gpu_  = peer<gpu? gpu : gpu+1;
     int peer_ = peer<gpu? peer+1 : peer;
-    int i, t  = enactor_stats->iteration%2;
+    int i, t  = getPushBufferIndex(syncPeriod, enactor_stats->iteration);
     bool to_reallocate = false;
     bool over_sized    = false;
-    
-    data_slice_p->in_length[enactor_stats->iteration%2][gpu_]
-                  = queue_length;
-    printf("PushNeibor: data_slice_l=%p data_slice_p=%p gpu=%d peer=%d gpu_=%d iteration=%d queue_length=%d db=%d\n"
-        , data_slice_l, data_slice_p, gpu, peer, gpu_, enactor_stats->iteration, queue_length, enactor_stats->iteration%2);
+    data_slice_p->in_length[t][gpu_] = queue_length;
+//    printf("PushNeibor: data_slice_l=%p data_slice_p=%p gpu=%d peer=%d gpu_=%d iteration=%d queue_length=%d db=%d\n"
+//        , data_slice_l, data_slice_p, gpu, peer, gpu_, enactor_stats->iteration, queue_length, t);
     if (queue_length == 0) return;
    
     if (data_slice_p -> keys_in[t][gpu_].GetSize() < queue_length) to_reallocate=true;
@@ -540,6 +551,14 @@ void PushNeibor(
             "cudaMemcpyPeer vertex_associate_out failed", __FILE__, __LINE__)) return;
     }
 
+//    //this keeps each thread's output separate.
+//    static std::mutex mutex;
+//    std::lock_guard<std::mutex> lock(mutex);
+//    
+//    int tmpK[queue_length];
+//    cudaMemcpy(tmpK, data_slice_p->keys_in[t][gpu_].GetPointer(util::DEVICE)
+//      , sizeof(int) * queue_length, cudaMemcpyDeviceToHost);
+
     for (int i=0;i<num_value__associate;i++)
     {   
         if (enactor_stats->retval = util::GRError(cudaMemcpyAsync(
@@ -551,7 +570,7 @@ void PushNeibor(
 //        cudaMemcpy(tmp, data_slice_p->value__associate_ins[t][gpu_][i], sizeof(float) * queue_length, cudaMemcpyDeviceToHost);
 //        printf("gpu %d -> peer %d\n", gpu, peer);
 //        for (int i = 0; i < queue_length; ++i)
-//            printf("  %d %f\n", i, tmp[i]);
+//            printf("  %d %d %f\n", i, tmpK[i], tmp[i]);
     }
 }
 
@@ -638,37 +657,31 @@ cudaError_t Check_Record(
 }
 
 
-//If Iteration provides a static member function with signature
-//  bool checkSync(const Enactor_Stats&)
-//then the return value will be used to determine whether or not
-//to do communication in a given iteration.  If such a method is
-//not provided, communication is always done.
-template <typename Iteration>
-struct CheckSync
-{
-  //See SO:87372
-  //this method only exists if Iteration has a static method checkSync that takes
-  //an EnactorStats ptr and returns bool.
-  template <class T> static typename std::is_same<bool
-    , decltype(T::checkSync( (const EnactorStats*)0 ))>::type hasMethod_(T*);
-  //default
-  template <class> static std::false_type hasMethod_(...);
-  static constexpr bool hasMethod = decltype(hasMethod_<Iteration>(0))::value;
-
-  static bool value(const EnactorStats*, ...)
-  {
-    return true;
-  }
-
-  template <class T = Iteration>
-  static typename std::enable_if<hasMethod, bool>::type value(EnactorStats* es)
-  {
-    return Iteration::checkSync(es);
-  }
-};
-
-
-
+//If Iteration provides a static integral member named syncPeriod
+//then that value will be used to determine how frequently comm occurs.
+//If not present, it is taken as 1.
+//Note: Here is a table indicating which iterations comm is done
+//      iteration  0   1   2   3   4   5   6   7   8
+//syncPeriod   -------------------------------------
+//1                -   x   x   x   x   x   x   x   x
+//2                -   x   -   x   -   x   -   x   -
+//3                -   x   -   -   x   -   -   x   -
+//The communications begin on 1 because that's the way it is currently
+//setup.  i.e. comm is done if (iteration - 1) % period == 0
+//
+//Double buffering:
+//Normally PushNeibors will write to local_iteration % 2 and Expand_Incoming
+//will look at local_iteration % 2 to achieve overlap of comm and compute.
+//Since we only push at syncPeriod intervals, the correct location is now
+//((local_iteration + 1) / syncPeriod) % 2.
+//      iteration   0   1   2   3   4   5   6   7   8
+//syncPeriod   --------------------------------------
+//1                 1   0   1   0   1   0   1   0   0
+//2                 0   1   1   0   0   1   1   0   0
+//3                 0   1   1   1   0   0   0   1   1
+//
+//Please use the getPushBufferIndex function to get this both here and
+//in the app_enactor code for any final communications.
 template <
     int      NUM_VERTEX_ASSOCIATES,
     int      NUM_VALUE__ASSOCIATES,
@@ -676,7 +689,8 @@ template <
     typename Functor,
     typename Iteration>
 void Iteration_Loop(
-    ThreadSlice *thread_data)
+    ThreadSlice *thread_data,
+    int syncPeriod = 1)
 {
     typedef typename Enactor::Problem     Problem   ;
     typedef typename Problem::SizeT       SizeT     ;
@@ -761,9 +775,9 @@ void Iteration_Loop(
         }
 
         
-        //let application decide whether to sync on this iteration or not
-        bool writeSync = CheckSync<Iteration>::value(enactor_stats);
-        printf("thread %d iteration=%d writeSync=%d\n", thread_num, enactor_stats->iteration, writeSync);
+        //do we need to do a push this iteration?
+        bool writeSync = (enactor_stats->iteration - 1) % syncPeriod == 0;
+        //printf("thread %d iteration=%d writeSync=%d\n", thread_num, enactor_stats->iteration, writeSync);
         
         while (data_slice->wait_counter < num_gpus*2
            && (!Iteration::Stop_Condition(s_enactor_stats, s_frontier_attribute, s_data_slice, num_gpus)))
@@ -830,11 +844,11 @@ void Iteration_Loop(
                             //printf("  thread %d: peer=%d iteration_=%d gpu_=%d is not ready\n", thread_num, peer__, iteration_, gpu_);
                             break;
                         }
-                        int syncBuffer = iteration % 2;
+                        int syncBuffer = getPushBufferIndex(syncPeriod, iteration);
                         s_data_slice[peer]->events_set[iteration_][gpu_][0]=false;
                         frontier_attribute_->queue_length = data_slice->in_length[syncBuffer][peer_];
-                        printf("* thread %d peer_ %d has given me queue_length=%d in db %d\n"
-                            , thread_num, peer_, frontier_attribute_->queue_length, syncBuffer);
+                        //printf("* thread %d peer_ %d has given me queue_length=%d in db %d\n"
+                        //    , thread_num, peer_, frontier_attribute_->queue_length, syncBuffer);
                         //data_slice->in_length[syncBuffer][peer_]=0;
                         if (frontier_attribute_->queue_length ==0)
                         {   stages[peer__]=3;break;}
@@ -860,20 +874,19 @@ void Iteration_Loop(
 
                         grid_size = frontier_attribute_->queue_length/256+1;
                         if (grid_size>512) grid_size=512;
-                        printf("* thread %d waiting on peer_ %d peer %d iteration_ %d gpu_ %d\n"
-                            , thread_num, peer_, peer, iteration_, gpu_);
+//                        printf("* thread %d waiting on peer_ %d peer %d iteration_ %d gpu_ %d\n"
+//                            , thread_num, peer_, peer, iteration_, gpu_);
                         cudaStreamWaitEvent(streams[peer_],
                             s_data_slice[peer]->events[iteration_][gpu_][0], 0);
                             
-                        printf("* thread %d expand_incoming incoming, queue length=%d\n"
-                            , thread_num, frontier_attribute_->queue_length);
+//                        printf("* thread %d expand_incoming incoming syncBuffer=%d, queue length=%d\n"
+//                            , thread_num, syncBuffer, frontier_attribute_->queue_length);
                         Iteration::template Expand_Incoming<NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
                             grid_size, 256, 
                             offset,
                             streams[peer_],
                             frontier_attribute_->queue_length,
-                            //data_slice ->keys_in[iteration%2][peer_].GetPointer(util::DEVICE),
-                            data_slice ->keys_in[0][peer_].GetPointer(util::DEVICE),
+                            data_slice ->keys_in[syncBuffer][peer_].GetPointer(util::DEVICE),
                             &frontier_queue_->keys[selector^1],
                             offset,
                             data_slice ->expand_incoming_array[peer_].GetPointer(util::DEVICE),
@@ -889,8 +902,8 @@ void Iteration_Loop(
                         //let app decide whether to push or not.
                         if (writeSync)
                         {
-                            printf("* thread %d pushing, peer=%d peer_=%d peer__=%d out_length=%d\n"
-                                , thread_num, peer, peer_, peer__, data_slice->out_length[peer_]);
+//                            printf("* thread %d pushing, peer=%d peer_=%d peer__=%d out_length=%d\n"
+//                                , thread_num, peer, peer_, peer__, data_slice->out_length[peer_]);
                             PushNeibor <Enactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice,
                                     NUM_VERTEX_ASSOCIATES, NUM_VALUE__ASSOCIATES> (
                                 thread_num,
@@ -901,11 +914,12 @@ void Iteration_Loop(
                                 s_data_slice  [peer]      .GetPointer(util::HOST),
                                 s_graph_slice [thread_num],
                                 s_graph_slice [peer],
-                                streams       [peer__]);
+                                streams       [peer__],
+                                syncPeriod);
                         }
                         else
                         {
-                          printf("thread %d skipped write sync on iteration %d\n", thread_num, s_enactor_stats->iteration);
+                          //printf("thread %d skipped write sync on iteration %d\n", thread_num, s_enactor_stats->iteration);
                         }
                         Set_Record(data_slice, iteration, peer_, stages[peer__], streams[peer__]);
                         stages[peer__]=3;

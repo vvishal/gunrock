@@ -159,7 +159,7 @@ namespace pr {
         {
             VertexId key = keys_in[x];
             Value old_value=atomicAdd(s_value__associate_org[0] + key, s_value__associate_in[0][x]);
-            //printf("rank[%d] = %f + %f \n", key, old_value, s_value__associate_in[0][x]);
+            //printf("rank[%d] = %f + %f, org=%p\n", key, old_value, s_value__associate_in[0][x], s_value__associate_org[0]);
             if (TO_TRACK)
             if (to_track(key)) printf("rank[%d] = %f + %f \n", key, old_value, s_value__associate_in[0][x]);
             x+=STRIDE;
@@ -659,13 +659,6 @@ public:
     typedef PRFunctor      <VertexId, SizeT, Value, Problem> PrFunctor;
     typedef PRMarkerFunctor<VertexId, SizeT, Value, Problem> PrMarkerFunctor;
 
-    //decide how many local iterations to do per global sync
-    static bool checkSync(const EnactorStats *stats)
-    {
-      return stats->iteration % 1 == 0;
-    }
-
-
     static void FullQueue_Core(
         int                            thread_num,
         int                            peer_,
@@ -1037,7 +1030,7 @@ public:
 
         for (peer_ = 1; peer_ < num_gpus; peer_ ++)
         {
-            printf("thread %d calling Assign_Values_PR\n", thread_num);
+            //printf("thread %d calling Assign_Values_PR\n", thread_num);
             Assign_Values_PR <VertexId, SizeT, Value>
                 <<<grid_size, block_size, 0, stream>>> (
                 data_slice[0]->out_length[peer_],
@@ -1135,9 +1128,11 @@ public:
             data_slice -> edge_map_queue_len = frontier_attribute[0].queue_length;
             //util::cpu_mt::PrintGPUArray("degrees", data_slice->degrees.GetPointer(util::DEVICE), graph_slice->nodes, thread_num);
 
+            const int syncPeriod = 3;
+
             // Step through PR iterations
             gunrock::app::Iteration_Loop
-                <0, 1, PrEnactor, PrFunctor, PRIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data);
+                <0, 1, PrEnactor, PrFunctor, PRIteration<AdvanceKernelPolicy, FilterKernelPolicy, PrEnactor> > (thread_data, syncPeriod);
             
             if (thread_num > 0)
             {
@@ -1157,6 +1152,7 @@ public:
                     data_slice->keys_out[0].GetPointer(util::DEVICE),
                     data_slice->local_nodes);
                 enactor_stats->iteration++;
+                //printf("final push for output\n");
                 PushNeibor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1> (
                     thread_num,
                     0,
@@ -1166,7 +1162,8 @@ public:
                     problem->data_slices [0         ].GetPointer(util::HOST),
                     problem->graph_slices[thread_num],
                     problem->graph_slices[0],
-                    data_slice->streams[0]);
+                    data_slice->streams[0],
+                    syncPeriod);
                 Set_Record(data_slice, enactor_stats->iteration, 1, 0, data_slice->streams[0]);
                 data_slice->final_event_set = true;
                 //util::cpu_mt::PrintGPUArray("keys_out", data_slice->keys_out[1].GetPointer(util::DEVICE), data_slice->local_nodes, thread_num, enactor_stats->iteration, -1, data_slice->streams[0]); 
@@ -1186,11 +1183,13 @@ public:
                         int peer_iteration = enactor->enactor_stats[peer * num_gpus].iteration;
                         cudaStreamWaitEvent(data_slice->streams[peer], 
                             problem->data_slices[peer]->events[peer_iteration%4][1][0], 0);
+
+                        int buffer = getPushBufferIndex(syncPeriod, peer_iteration);
                         Expand_Incoming_Final<VertexId, SizeT, Value>
                             <<<128, 128, 0, data_slice->streams[peer]>>> (
                             problem->data_slices[peer]->local_nodes,
-                            data_slice->keys_in[peer_iteration%2][peer].GetPointer(util::DEVICE),
-                            data_slice->value__associate_in[peer_iteration%2][peer][0].GetPointer(util::DEVICE),
+                            data_slice->keys_in[buffer][peer].GetPointer(util::DEVICE),
+                            data_slice->value__associate_in[buffer][peer][0].GetPointer(util::DEVICE),
                             data_slice->rank_curr.GetPointer(util::DEVICE));
                     }
                 }
@@ -1277,7 +1276,7 @@ public:
             util::cpu_mt::DestoryBarrier(&cpu_barrier[1]);
             delete[] cpu_barrier;cpu_barrier=NULL;
         }    
-    }    
+    }
 
     /**
      * \addtogroup PublicInterface
