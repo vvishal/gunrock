@@ -60,9 +60,9 @@ int ReadMarketStream(
 {
     typedef Coo<VertexId, Value> EdgeTupleType;
 
-    SizeT edges_read = -1;
-    SizeT nodes = 0;
-    SizeT edges = 0;
+    SizeT edges_read = -1L;
+    SizeT nodes = 0L;
+    SizeT edges = 0L;
     EdgeTupleType *coo = NULL; // read in COO format
 
     time_t mark0 = time(NULL);
