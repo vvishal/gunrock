@@ -26,6 +26,9 @@
 #include <gunrock/app/pr/pr_functor.cuh>
 #include <moderngpu.cuh>
 
+#include <mutex>
+
+
 using namespace mgpu;
 
 namespace gunrock {
@@ -684,7 +687,7 @@ public:
             frontier_attribute->queue_length = data_slice -> edge_map_queue_len;
             enactor_stats->total_queued[0] += frontier_attribute->queue_length;
 
-
+/*
 
             float x1[10];
             float x2[10];
@@ -702,7 +705,7 @@ public:
             }
 
             printf("\n--\n");
-
+*/
             //printf("Filter start.\n");fflush(stdout);
              // filter kernel
             gunrock::oprtr::filter::Kernel<FilterKernelPolicy, Problem, PrFunctor>
@@ -733,7 +736,7 @@ public:
             //num_elements = queue_length;
 
             //swap rank_curr and rank_next
-
+/*
             printf("B:");
             cudaMemcpy(x1,data_slice->rank_curr.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
             cudaMemcpy(x2,data_slice->rank_next.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
@@ -747,7 +750,7 @@ public:
             }
 
             printf("\n--\n");
-
+*/
             util::MemsetCopyVectorKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_curr.GetPointer(util::DEVICE),
                 data_slice->rank_next.GetPointer(util::DEVICE),
@@ -756,7 +759,7 @@ public:
             util::MemsetKernel<<<128, 128, 0, stream>>>(
                 data_slice->rank_next.GetPointer(util::DEVICE),
                 (Value)0.0, graph_slice->nodes);
-
+/*
             printf("C:");
             cudaMemcpy(x1,data_slice->rank_curr.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
             cudaMemcpy(x2,data_slice->rank_next.GetPointer(util::DEVICE),sizeof(float)*max_display,cudaMemcpyDeviceToHost);
@@ -770,7 +773,7 @@ public:
             }
 
             printf("\n\n\n\n\n");
-
+*/
             if (enactor_stats->retval = util::GRError(cudaStreamSynchronize(stream), "cudaStreamSynchronize failed", __FILE__, __LINE__));
             data_slice->PR_queue_length = frontier_attribute->queue_length;
             //enactor_stats      -> Accumulate(
@@ -940,14 +943,14 @@ public:
         }
 
         for (int gpu =0; gpu < num_gpu_local; gpu++){
-printf("%s:%d ==== data_slices[%d]->PR_queue_length = %d;\n",__FILE__,__LINE__,gpu,data_slice[gpu]->PR_queue_length);
+//printf("%s:%d ==== data_slices[%d]->PR_queue_length = %d;\n",__FILE__,__LINE__,gpu,data_slice[gpu]->PR_queue_length);
         if (data_slice[gpu]->PR_queue_length > 0)
         {
             //printf("data_slice[%d].PR_queue_length = %d\n", gpu, data_slice[gpu]->PR_queue_length);
             all_zero = 0;
         }
     }
-printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
+//printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
         if (!all_zero){
         	for (int gpu = 0; gpu < num_gpu_local; gpu++)
         	if (enactor_stats[gpu * num_gpu_global].iteration < data_slice[0]->max_iter)
@@ -957,15 +960,17 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
         	}
 		}
 
-printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
+//printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"false",ret_val?"true":"false",__FILE__,__LINE__);
 
 		//synchronize with all nodes
 		int world_rec_val=1;
-
-        MPI_Allreduce(&ret_val, &world_rec_val,1,MPI_INT,MPI_LAND, MPI_COMM_WORLD);
-
-        printf(" >>>>>>>> locigal_and <<<<<<<< \e[%im   MPI_Allreduce passed, returning %s\e[39m\n ", mpi_topology->local_rank+32, world_rec_val? "true" : "false"); fflush(stdout);
-
+        {
+            std::lock_guard<std::mutex> lock(sendRecvMutex);
+            MPI_Barrier(MPI_COMM_WORLD);
+            MPI_Allreduce(&ret_val, &world_rec_val,1,MPI_INT,MPI_LAND, MPI_COMM_WORLD);
+        }
+        printf(" \e[%im>>>>>>>> logical_and  MPI_Allreduce passed, returning %s <<<<<<<<<<\e[39m\n ", enactor_stats[0].iteration%6+32, world_rec_val? "true" : "false"); fflush(stdout);
+            //printf(" >>>>>>>> locigal_and <<<<<<<< \e[%im   MPI_Allreduce passed, returning %s\e[39m\n ", mpi_topology->local_rank+32, world_rec_val? "true" : "false"); fflush(stdout);
         if(world_rec_val) return true;
         return false;
     }
@@ -1319,29 +1324,36 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                         }
 					}
 				    MPI_Request ***sent_requests = (MPI_Request ***)malloc(sizeof(MPI_Request **)*(problem->mpi_topology->total_num_gpus));
+                    void *** mpi_sendbuffer = (void***)malloc(sizeof(void**)*2*problem->mpi_topology->total_num_gpus);
+
                     int ** req_size = (int**)malloc(sizeof(int*)*problem->mpi_topology->total_num_gpus);
-                    if(sent_requests==NULL || req_size==NULL){
+                    if(sent_requests==NULL || req_size==NULL || mpi_sendbuffer==NULL){
                         printf("No more memory\n");
                         exit(0);
                     }
                     for(int g=0;g<problem->mpi_topology->total_num_gpus; g++)
                     {
+                        mpi_sendbuffer[g]   = (void**)calloc(4,sizeof(void*));  //4 buffers: header,keys, vertex_associates, value_associates
                         sent_requests[g] = (MPI_Request **)malloc(sizeof(MPI_Request*)*problem->mpi_topology->total_num_gpus);
                         req_size[g] = (int*)malloc(sizeof(int*) * problem->mpi_topology->total_num_gpus);
-                        if(sent_requests[g]==NULL){
+                        if(sent_requests[g]==NULL || mpi_sendbuffer[g]==NULL)
+                        {
                             printf("No more memory\n");
                             exit(0);
                         }
-                        for(int p=0;p<problem->mpi_topology->total_num_gpus; p++){
+                        for(int p=0;p<problem->mpi_topology->total_num_gpus; p++)
+                        {
                                 sent_requests[g][p]=(MPI_Request *)malloc(sizeof(MPI_Request)*4);
-                                if(sent_requests[g][p]==NULL){
+
+                                if(sent_requests[g][p]==NULL)
+                                {
                                     printf("No more memory\n");
                                     exit(0);
                                 }
                         }
                     }
 
-                    void *** mpi_sendbuffer = (void***)malloc(sizeof(void**)*2*problem->mpi_topology->total_num_gpus);
+
 
                     MPI_PushNeighbor <PrEnactor::SIZE_CHECK, SizeT, VertexId, Value, GraphSlice, DataSlice, 0, 1>(
                        problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num],//gpu
@@ -1361,12 +1373,27 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
                        problem->mpi_ring_buffer[0]->mpi_value__type,
                        mpi_sendbuffer
                        );
-                    printf("sent out node content from gpu %i to 0\n",problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num]);fflush(stdout);
-					while(!MPI_Communication_Check(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global,mpi_sendbuffer))
+                    //printf("sent out node content from gpu %i to 0\n",problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num]);fflush(stdout);
+					while(!MPI_Communication_Wait(sent_requests,req_size,problem  ->  mpi_topology -> global_gpu_maping[rank][thread_num], 0, num_gpus_global,mpi_sendbuffer))
 					{
 						sleep(0);
 					}
 
+                    for(int g=0; g<problem->mpi_topology->total_num_gpus; g++)
+                    {
+                        //for(int p=0; p<problem->mpi_topology->total_num_gpus; p++)
+                        //{
+                        //    free(sent_requests[g][p]);
+                        //}
+                        free(mpi_sendbuffer[g]);
+                        free(sent_requests[g]);
+                        free(req_size[g]);
+                    }
+                    free(mpi_sendbuffer);
+                    free(sent_requests);
+                    free(req_size);
+
+/*
 		   		    for(int i=0; i<problem->mpi_topology->total_num_gpus; i++)
 		   		    {
                         for(int g=0;g<problem->mpi_topology->total_num_gpus; g++){
@@ -1377,7 +1404,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 		   		    }
                     free(req_size);
 		   			free(sent_requests);
-
+*/
 #endif
 				}
                 data_slice->final_event_set = true;
@@ -1410,13 +1437,17 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 #endif
                         	    cudaStreamWaitEvent(data_slice->streams[local_peer],
                                 	problem->data_slices[local_peer]->events[peer_iteration%4][1][0], 0);
-                                int k[5];float f[5];
-                                cudaMemcpy(&(k[0]),data_slice->keys_in[peer_iteration%2][local_peer].GetPointer(util::DEVICE),problem->data_slices[local_peer]->local_nodes*sizeof(int),cudaMemcpyDeviceToHost);
-                                cudaMemcpy(&(f[0]),data_slice->value__associate_in[peer_iteration%2][local_peer][0].GetPointer(util::DEVICE),problem->data_slices[local_peer]->local_nodes*sizeof(float),cudaMemcpyDeviceToHost);
+                              /*
+                                int m=problem->data_slices[local_peer]->local_nodes>5?5:problem->data_slices[local_peer]->local_nodes;
+                                int k[m];float f[m];
+
+                                cudaMemcpy(&(k[0]),data_slice->keys_in[peer_iteration%2][local_peer].GetPointer(util::DEVICE),m*sizeof(int),cudaMemcpyDeviceToHost);
+                                cudaMemcpy(&(f[0]),data_slice->value__associate_in[peer_iteration%2][local_peer][0].GetPointer(util::DEVICE),m*sizeof(float),cudaMemcpyDeviceToHost);
                                 printf("receiving from local_peer %i (peer %i) from buffer [%i][%i][%i] with iteration %i: ",local_peer, peer,peer_iteration%2,local_peer,0, peer_iteration);
-                                for(int i=0;i<problem->data_slices[local_peer]->local_nodes; i++) printf(" %i:%f ",k[i],f[i]);
+                                for(int i=0;i<m; i++) printf(" %i:%f ",k[i],f[i]);
                                 printf("\n");
-                        	    Expand_Incoming_Final<VertexId, SizeT, Value>
+                        	  */
+                                Expand_Incoming_Final<VertexId, SizeT, Value>
                                 	<<<128, 128, 0, data_slice->streams[local_peer]>>> (
                             	    	problem->data_slices[local_peer]->local_nodes,
                             	    	data_slice->keys_in[peer_iteration%2][local_peer].GetPointer(util::DEVICE),
@@ -1434,7 +1465,7 @@ printf(" stop_condition: all_zero = %s, ret_val=%s %s:%d\n", all_zero?"true":"fa
 
     							//copy from ring buffer to
     							printf("waiting for final data from peer %d, %s:%d\n", peer,__FILE__,__LINE__);
-                                while(problem->mpi_ring_buffer[0]->all_done!=2){sleep(0);}
+                                //while(problem->mpi_ring_buffer[0]->all_done!=2){sleep(0);}
     							while(!problem->mpi_ring_buffer[0]->has_data(peer)){sleep(0);}
                                 while(problem-> mpi_ring_buffer[0]->fill_level[peer]>1){problem->mpi_ring_buffer[0]->pop_back(peer);}
     							while(!problem->mpi_ring_buffer[0]->has_data(peer)){sleep(0);}
@@ -1658,13 +1689,18 @@ public:
         thread_slices = new ThreadSlice [num_gpus_local];
         thread_Ids    = new CUTThread   [num_gpus_local];
 #endif
+        MPI_Barrier(MPI_COMM_WORLD);
         for (int gpu=0; gpu<num_gpus_local; gpu++)
         {
             thread_slices[gpu].cpu_barrier  = cpu_barrier;
             thread_slices[gpu].thread_num   = gpu;                            //assign thread id to gpu id
             thread_slices[gpu].problem      = (void*)problem;
             thread_slices[gpu].enactor      = (void*)this;
+#ifdef WITHMPI
             thread_slices[gpu].context      =&(context[gpu*problem->mpi_topology->total_num_gpus]);
+#else
+            thread_slices[gpu].context      =&(context[gpu * this->num_gpus]);
+#endif
             thread_slices[gpu].stats        = -1;
             EnactorStats * e = &(this->enactor_stats[0]);
 
@@ -1729,8 +1765,6 @@ public:
                 thread_slices[gpu].stats=2;
             }
 #ifdef WITHMPI
-printf(" 0: retval %d, iteration \n",this->enactor_stats[0].retval,this->enactor_stats[0].iteration);
-printf(" 1: retval %d, iteration %d\n",this->enactor_stats[1].retval,this->enactor_stats[1].iteration);
             while (thread_slices[this->num_gpus_local].stats!=1) sleep(0);
             thread_slices[this->num_gpus_local].stats=2;
 #endif

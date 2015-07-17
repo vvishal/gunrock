@@ -456,7 +456,7 @@ struct PRProblem : ProblemBase<VertexId, SizeT, Value,
 
 			   //we only need 2*num_gpus_local cuda streams for each GPU, since non-local communication is handeled via MPI
                //however, we assign 2*num_gpus_global, because we don't know which gpus are local and which not
-               printf("%s:%i  gpu=%d num_gpus_local=%d gpu*2*num_gpus_global=%d\n",__FILE__,__LINE__,gpu,num_gpus_local,gpu*2*num_gpus_global);
+               //printf("%s:%i  gpu=%d num_gpus_local=%d gpu*2*num_gpus_global=%d\n",__FILE__,__LINE__,gpu,num_gpus_local,gpu*2*num_gpus_global);
                data_slice_->streams.SetPointer(&streams[gpu*2*num_gpus_global], 2*num_gpus_global);
                cudaStream_t *streams = data_slice_->streams.GetPointer(util::HOST);
                if (num_gpus_global > 1)

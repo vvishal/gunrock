@@ -323,6 +323,8 @@ namespace app {
        int * global_to_device_idx         ;   // gives for the global gpu number the device id of that GPU on the node
        int total_num_gpus                 ;   // the total number of GPUs
        int local_rank                     ;   // the local MPI rank
+       int max_send_buffer_size           ;
+       int max_nr_messages                ;
 
    };
 
@@ -355,8 +357,8 @@ namespace app {
            length = size;
            all_done = 0;
            buffer_keys = (void***)malloc(num_gpu_global*sizeof(void**));
-           buffer_vertex = (VertexId***)malloc(num_vertex_associate*sizeof(VertexId***));
-           buffer_value = (Value***)malloc(num_value__associate*sizeof(Value***));
+           buffer_vertex = (VertexId***)malloc(num_gpu_global*sizeof(VertexId***));
+           buffer_value = (Value***)malloc(num_gpu_global*sizeof(Value***));
            if(buffer_keys==NULL || buffer_vertex==NULL || buffer_value==NULL)
            {
                fprintf(stderr,"Not enough memory. Aborting . %s:%d\n",__FILE__,__LINE__);
@@ -409,7 +411,7 @@ namespace app {
                back_pos[i]   = 0;
                fill_level[i] = 0;
            }
-
+           checked=0;
        }
 
        void initBarrier(){
@@ -1369,7 +1371,6 @@ namespace app {
                     for (int gpu=0;gpu<num_gpus;gpu++)
                     {
                     sub_graphs[gpu].DisplayGraph("sub_graph",sub_graphs[gpu].nodes);
-                    printf("%d\n",gpu);
                     util::cpu_mt::PrintCPUArray<SizeT,int     >("partition"           , partition_tables    [gpu+1], sub_graphs[gpu].nodes);
                     util::cpu_mt::PrintCPUArray<SizeT,VertexId>("convertion"          , convertion_tables   [gpu+1], sub_graphs[gpu].nodes);
                     //util::cpu_mt::PrintCPUArray<SizeT,SizeT   >("backward_offsets"    , backward_offsets    [gpu], sub_graphs[gpu].nodes);
@@ -1497,13 +1498,6 @@ namespace app {
            int rank = mpi_topology->local_rank;
            int num_gpus_local  = mpi_topology->num_gpus_per_server[rank];
            int num_gpus_global = mpi_topology->total_num_gpus;
-
-           if(gpu_idx_local==NULL){
-               printf("PROBLEM!\n");
-               exit(0);
-           }else{
-               printf("local_gpu=%d, start_offset=%d, num_local_gpus=%d\n",gpu_idx_local[0],local_gpu_idx_start,num_gpus_local);
-           }
 
            do {
                if (num_gpus_global==1 && gpu_idx_local==NULL)
