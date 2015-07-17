@@ -193,8 +193,8 @@ struct Csr
         {
             time_t mark1 = time(NULL);
 
-            std::istream_iterator<int> start(_file), end;
-            std::vector<int> v(start, end);
+            std::istream_iterator<SizeT> start(_file), end;
+            std::vector<SizeT> v(start, end);
 
             SizeT csr_nodes = v.at(0);
             SizeT csr_edges = v.at(1);
